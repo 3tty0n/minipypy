@@ -5,6 +5,9 @@ operate on bytecodes (e.g. peephole optimizers).
 Copied from CPython 3.9
 """
 
+class Bytecodes:
+    pass
+
 __all__ = ["cmp_op", "hasconst", "hasname", "hasjrel", "hasjabs",
            "haslocal", "hascompare", "hasfree", "opname", "opmap",
            "HAVE_ARGUMENT", "EXTENDED_ARG", "hasnargs"]
@@ -39,6 +42,7 @@ opname = ['<%r>' % (op,) for op in range(256)]
 def def_op(name, op):
     opname[op] = name
     opmap[name] = op
+    setattr(Bytecodes, name, op)
 
 def name_op(name, op):
     def_op(name, op)
