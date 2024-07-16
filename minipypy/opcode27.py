@@ -1,9 +1,13 @@
 opmap = {}
 opname = ['<%r>' % (op,) for op in range(256)]
 
-def def_op(name, op):
-    opname[op] = name
-    opmap[name] = op
+class Bytecodes:
+    pass
+
+def def_op(name, opcode):
+    opname[opcode] = name
+    opmap[name] = opcode
+    setattr(Bytecodes, name, opcode)
 
 # cf. https://unpyc.sourceforge.net/Opcodes.html
 
