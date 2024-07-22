@@ -1,4 +1,5 @@
 import binascii
+import compiler
 import marshal
 import struct
 import sys
@@ -45,8 +46,15 @@ def load_pyc_py2(fname):
     return code
 
 
+def compile_py2(fname):
+    f = open(fname, 'r')
+    code = compile(f.read(), '', 'exec')
+    f.close()
+    return code
+
+
 if __name__ == "__main__":
     import dis
 
-    code = load_pyc_py2(sys.argv[1])
-    dis.disassemble(code)
+    code = compile_py2(sys.argv[1])
+    # dis.disassemble(code)

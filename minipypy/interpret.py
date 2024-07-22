@@ -1,5 +1,13 @@
+import sys
+
 import frontend
-from opcode import Bytecodes, opmap, opname
+from opcode27 import Bytecodes, opmap, opname
+
+
+try:
+    BUILTINS = sys.modules['__builtin__']
+except:
+    BUILTINS = sys.modules['builtins']
 
 
 class W_Object(object):
@@ -35,6 +43,18 @@ class PyFrame(object):
         self.pc = 0
         self.env = {}
 
+    def pop(self):
+        w_x = self.stack[self.stack_ptr]
+        self.stack_ptr -= 1
+        return w_x
+
+    def push(self, w_x):
+        self.stack_ptr += 1
+        self.stack[self.stack_ptr] = w_x
+
+    def top(self):
+        return self.stack[self.stack_ptr]
+
     def read_const(self, operand):
         value = self.code.co_consts[operand]
         if not value:
@@ -59,8 +79,7 @@ class PyFrame(object):
         self.pc += 2
 
         var = self.code.co_names[operand1]
-        self.env[var] = self.stack[self.stack_ptr]
-        self.stack_ptr -= 1
+        self.env[var] = self.pop()
 
     def LOAD_NAME(self):
         operand1 = ord(self.code.co_code[self.pc])
@@ -68,31 +87,25 @@ class PyFrame(object):
         self.pc += 2
 
         var = self.code.co_names[operand1]
-        self.stack_ptr += 1
-        self.stack[self.stack_ptr] = self.env[var]
+        self.push(self.env[var])
 
     def BINARY_ADD(self):
-        w_y = self.stack[self.stack_ptr]
-        self.stack_ptr -= 1
-        w_x = self.stack[self.stack_ptr]
-        self.stack_ptr -= 1
-
+        w_y = self.pop()
+        w_x = self.pop()
         w_z = w_x.add(w_y)
-
-        self.stack_ptr += 1
-        self.stack[self.stack_ptr] = w_z
-
-    def YIELD_FROM(self):
-        pass
-
-    def LOAD_BUILD_CLASS(self):
-        "Load bultin module"
-        pass
+        self.push(w_z)
 
     def RETURN_VALUE(self):
         w_x = self.stack[self.stack_ptr]
         self.stack_ptr -= 1
         return w_x
+
+    def PRINT_ITME(self):
+        w_x = self.pop()
+        print w_x,
+
+    def PRINT_NEWLINE(self):
+        print
 
     def interpret(self):
         while self.pc < len(self.code.co_code):
@@ -110,15 +123,20 @@ class PyFrame(object):
                 self.STORE_NAME()
             elif opcode == Bytecodes.RETURN_VALUE:
                 return self.RETURN_VALUE()
-            elif opcode == Bytecodes.YIELD_FROM:
-                pass
-            elif opcode == Bytecodes.LOAD_BUILD_CLASS:
-                pass
+            elif opcode == Bytecodes.PRINT_ITEM:
+                self.PRINT_ITME()
+            elif opcode == Bytecodes.PRINT_NEWLINE:
+                self.PRINT_NEWLINE()
+            elif opcode == Bytecodes.MAKE_FUNCTION:
+                self.pc += 2
+            elif opcode == Bytecodes.CALL_FUNCTION:
+                self.pc += 2
 
 
 if __name__ == "__main__":
     import sys
+    import dis
 
-    code = frontend.load_pyc_py2(sys.argv[1])
+    code = frontend.compile_py2(sys.argv[1])
     pyframe = PyFrame(code)
     w_x = pyframe.interpret()
