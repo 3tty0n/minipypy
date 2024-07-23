@@ -1,44 +1,19 @@
 import sys
+import types
 
 import frontend
-from opcode27 import Bytecodes, opmap, opname
-
-
-try:
-    BUILTINS = sys.modules['__builtin__']
-except:
-    BUILTINS = sys.modules['builtins']
-
-
-class W_Object(object):
-    def __init__(self, value):
-        self.value = value
-
-
-class W_NoneObject(W_Object):
-    def __init__(self):
-        pass
-
-    def __repr__(self):
-        return "W_None()"
-
-
-class W_IntObject(W_Object):
-    def __init__(self, value):
-        self.value = value
-
-    def __repr__(self):
-        return "W_IntObject(%d)" % (self.value)
-
-    def add(self, other):
-        return W_IntObject(self.value + other.value)
+from minipypy.objects.integer import W_Integer
+from minipypy.objects.object import W_Object
+from minipypy.objects.function import W_Function
+from minipypy.objects.code import W_Code
+from minipypy.opcode27 import Bytecodes, opmap, opname
 
 
 class PyFrame(object):
 
     def __init__(self, code):
         self.code = code
-        self.stack = [W_NoneObject()] * 8
+        self.stack = [None] * 8
         self.stack_ptr = -1
         self.pc = 0
         self.env = {}
@@ -56,38 +31,55 @@ class PyFrame(object):
         return self.stack[self.stack_ptr]
 
     def read_const(self, operand):
-        value = self.code.co_consts[operand]
-        if not value:
-            return W_NoneObject()
-        elif isinstance(value, int):
-            return W_IntObject(value)
-        else:
-            return W_Object(value)
+        return self.code.co_consts[operand]
+
+    def read_operand(self):
+        operand = ord(self.code.co_code[self.pc])
+        self.pc += 1
+        return operand
+
+    def POP_TOP(self):
+        self.pop()
 
     def LOAD_CONST(self):
-        operand1 = ord(self.code.co_code[self.pc])
-        operand2 = ord(self.code.co_code[self.pc + 1])
-        self.pc += 2
+        operand1 = self.read_operand()
+        _ = self.read_operand()
 
         w_x = self.read_const(operand1)
         self.stack_ptr += 1
         self.stack[self.stack_ptr] = w_x
 
     def STORE_NAME(self):
-        operand1 = ord(self.code.co_code[self.pc])
-        operand2 = ord(self.code.co_code[self.pc + 1])
-        self.pc += 2
+        operand1 = self.read_operand()
+        _ = self.read_operand()
 
         var = self.code.co_names[operand1]
         self.env[var] = self.pop()
 
     def LOAD_NAME(self):
-        operand1 = ord(self.code.co_code[self.pc])
-        operand2 = ord(self.code.co_code[self.pc + 1])
-        self.pc += 2
+        operand1 = self.read_operand()
+        _ = self.read_operand()
 
         var = self.code.co_names[operand1]
         self.push(self.env[var])
+
+    def LOAD_CONST(self):
+        operand1 = self.read_operand()
+        _ = self.read_operand()
+
+        const = self.read_const(operand1)
+        if not const:
+            self.push(None)
+        elif isinstance(const, types.CodeType):
+            self.push(W_Code(const))
+        elif isinstance(const, int):
+            self.push(W_Integer(const))
+        elif isinstance(const, float):
+            raise Exception("Unimplemented pattern", const)
+        elif isinstance(const, str):
+            raise Exception("Unimplemented pattern", const)
+        else:
+            raise Exception("Unimplemented pattern", const)
 
     def BINARY_ADD(self):
         w_y = self.pop()
@@ -96,9 +88,23 @@ class PyFrame(object):
         self.push(w_z)
 
     def RETURN_VALUE(self):
-        w_x = self.stack[self.stack_ptr]
-        self.stack_ptr -= 1
-        return w_x
+        return self.pop()
+
+    def MAKE_FUNCTION(self):
+        argc = self.read_operand()
+        _ = self.read_operand()
+
+        code = self.pop()
+        arg_defaults = [None] * argc
+        i = 0
+        while i < argc:
+            arg_defaults[i] = self.pop()
+            i += 1
+        w_function = W_Function(code, arg_defaults)
+        self.push(w_function)
+
+    def CALL_FUNCTION(self):
+        pass
 
     def PRINT_ITME(self):
         w_x = self.pop()
@@ -112,7 +118,7 @@ class PyFrame(object):
             opcode = ord(code.co_code[self.pc])
             self.pc += 1
 
-            print(opcode, opname[opcode])
+            print(opcode, opname[opcode], self.stack, self.stack_ptr)
             if opcode == Bytecodes.LOAD_CONST:
                 self.LOAD_CONST()
             elif opcode == Bytecodes.BINARY_ADD:
@@ -128,9 +134,13 @@ class PyFrame(object):
             elif opcode == Bytecodes.PRINT_NEWLINE:
                 self.PRINT_NEWLINE()
             elif opcode == Bytecodes.MAKE_FUNCTION:
-                self.pc += 2
+                self.MAKE_FUNCTION()
             elif opcode == Bytecodes.CALL_FUNCTION:
                 self.pc += 2
+            elif opcode == Bytecodes.POP_TOP:
+                self.POP_TOP()
+            elif opcode == Bytecodes.STOP_CODE:
+                pass
 
 
 if __name__ == "__main__":
