@@ -11,7 +11,7 @@ def def_op(name, opcode):
 
 # cf. https://unpyc.sourceforge.net/Opcodes.html
 
-def_op('STORE_CODE', 0x00)
+def_op('STOP_CODE', 0x00)
 def_op('POP_TOP', 0x01)
 def_op('ROT_TWO', 0x02)
 def_op('ROT_THREE', 0x03)
