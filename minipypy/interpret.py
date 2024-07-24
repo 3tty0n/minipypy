@@ -180,6 +180,6 @@ if __name__ == "__main__":
     import sys
     import dis
 
-    code = frontend.compile_py2(sys.argv[1])
+    code = frontend.load_pyc_py2(sys.argv[1])
     pyframe = PyFrame(code)
     w_x = pyframe.interpret()
