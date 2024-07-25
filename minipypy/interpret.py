@@ -46,7 +46,7 @@ class PyFrame(object):
 
     def read_operand(self):
         operand = ord(self.code.co_code[self.pc])
-        self.pc += 1
+        self.pc += 2
         return operand
 
     def POP_TOP(self):
@@ -54,33 +54,28 @@ class PyFrame(object):
 
     def STORE_NAME(self):
         operand1 = self.read_operand()
-        _ = self.read_operand()
 
         var = self.code.co_names[operand1]
         self.env[var] = self.pop()
 
     def STORE_FAST(self):
         operand1 = self.read_operand()
-        _ = self.read_operand()
         w_x = self.pop()
         self.locals_cells_stack_w[operand1] = w_x
 
     def LOAD_NAME(self):
         operand1 = self.read_operand()
-        _ = self.read_operand()
 
         var = self.code.co_names[operand1]
         self.push(self.env[var])
 
     def LOAD_FAST(self):
         operand1 = self.read_operand()
-        _ = self.read_operand()
         w_x = self.locals_cells_stack_w[operand1]
         self.push(w_x)
 
     def LOAD_CONST(self):
         operand1 = self.read_operand()
-        _ = self.read_operand()
 
         const = self.read_const(operand1)
         if not const:
@@ -96,10 +91,58 @@ class PyFrame(object):
         else:
             raise Exception("Unimplemented pattern", const)
 
+    def BINARY_POWER(self):
+        w_y = self.pop()
+        w_x = self.pop()
+        w_z = w_x.power(w_y)
+        self.push(w_z)
+
+    def BINARY_MULTIPLY(self):
+        w_y = self.pop()
+        w_x = self.pop()
+        w_z = w_x.mul(w_y)
+        self.push(w_z)
+
+    def BINARY_DIVIDE(self):
+        w_y = self.pop()
+        w_x = self.pop()
+        w_z = w_x.div(w_y)
+        self.push(w_z)
+
+    def BINARY_MODULO(self):
+        w_y = self.pop()
+        w_x = self.pop()
+        w_z = w_x.mod(w_y)
+        self.push(w_z)
+
     def BINARY_ADD(self):
         w_y = self.pop()
         w_x = self.pop()
         w_z = w_x.add(w_y)
+        self.push(w_z)
+
+    def BINARY_SUBTRACT(self):
+        w_y = self.pop()
+        w_x = self.pop()
+        w_z = w_x.sub(w_y)
+        self.push(w_z)
+
+    def BINARY_SUBSCR(self):
+        w_y = self.pop()
+        w_x = self.pop()
+        w_z = w_x.subscr(w_y)
+        self.push(w_z)
+
+    def BINARY_FLOOR_DIVIDE(self):
+        w_y = self.pop()
+        w_x = self.pop()
+        w_z = w_x.div(w_y) # TODO: floor
+        self.push(w_z)
+
+    def BINARY_TRUE_DIVIDE(self):
+        w_y = self.pop()
+        w_x = self.pop()
+        w_z = w_x.true_div(w_y)
         self.push(w_z)
 
     def RETURN_VALUE(self):
@@ -107,7 +150,6 @@ class PyFrame(object):
 
     def MAKE_FUNCTION(self):
         argc = self.read_operand()
-        _ = self.read_operand()
 
         code = self.pop()
         arg_defaults = [None] * argc
@@ -120,7 +162,7 @@ class PyFrame(object):
 
     def CALL_FUNCTION(self):
         argc = self.read_operand()
-        _ = self.read_operand()
+
         kwnum = argc >> 8
         argnum = argc
         if kwnum > 0:
