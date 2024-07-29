@@ -74,8 +74,6 @@ class PyFrame(object):
         const = self.read_const(operand1)
         if not const:
             self.push(W_None())
-        elif isinstance(const, types.CodeType):
-            self.push(W_Code(const))
         elif isinstance(const, W_Root):
             self.push(const)
         else:
