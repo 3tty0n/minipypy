@@ -111,9 +111,11 @@ def_op('IMPORT_NAME', 0x6b)
 def_op('IMPORT_FROM', 0x6c)
 
 def_op('JUMP_FORWARD', 0x6e)
-def_op('JUMP_IF_FALSE', 0x6f)
-def_op('JUMP_IF_TRUE', 0x70)
+def_op('JUMP_IF_FALSE_OR_POP', 0x6f)
+def_op('JUMP_IF_TRUE_OR_POP', 0x70)
 def_op('JUMP_ABSOLUTE', 0x71)
+def_op('POP_JUMP_IF_FALSE', 0x72)
+def_op('POP_JUMP_IF_TRUE', 0x73)
 
 def_op('LOAD_GLOBAL', 0x74)
 
