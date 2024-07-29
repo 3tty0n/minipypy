@@ -2,11 +2,8 @@ import sys
 import types
 
 import frontend
-from minipypy.objects.integer import W_Integer
-from minipypy.objects.object import W_Object
-from minipypy.objects.function import W_Function
-from minipypy.objects.reference import W_Ref
-from minipypy.objects.code import W_Code
+from minipypy.objects.baseobject import *
+from minipypy.objects.pycode import PyCode
 from minipypy.opcode27 import Bytecodes, opmap, opname
 
 
@@ -33,12 +30,9 @@ class PyFrame(object):
         return self.stack[self.stack_ptr]
 
     def create_pyframe(self, code, args):
-        assert isinstance(code, W_Code)
-        pyframe = PyFrame(code.value)
+        pyframe = PyFrame(code)
         for i in range(len(args)):
-            j = len(args) - 1 - i
-            assert j >= 0
-            pyframe.locals_cells_stack_w[i] = args[j]
+            pyframe.locals_cells_stack_w[i] = args[i]
         return pyframe
 
     def read_const(self, operand):
@@ -79,15 +73,11 @@ class PyFrame(object):
 
         const = self.read_const(operand1)
         if not const:
-            self.push(None)
+            self.push(W_None())
         elif isinstance(const, types.CodeType):
             self.push(W_Code(const))
-        elif isinstance(const, int):
-            self.push(W_Integer(const))
-        elif isinstance(const, float):
-            raise Exception("Unimplemented pattern", const)
-        elif isinstance(const, str):
-            raise Exception("Unimplemented pattern", const)
+        elif isinstance(const, W_Root):
+            self.push(const)
         else:
             raise Exception("Unimplemented pattern", const)
 
@@ -164,9 +154,7 @@ class PyFrame(object):
         argc = self.read_operand()
 
         kwnum = argc >> 8
-        argnum = argc
-        if kwnum > 0:
-            argnum = argc & 0xff
+        argnum = argc & 0xff
         args = [None] * argnum
         for i in range(argnum):
             args[i] = self.pop()
@@ -194,6 +182,8 @@ class PyFrame(object):
                 self.LOAD_CONST()
             elif opcode == Bytecodes.BINARY_ADD:
                 self.BINARY_ADD()
+            elif opcode == Bytecodes.BINARY_DIVIDE:
+                self.BINARY_DIVIDE()
             elif opcode == Bytecodes.LOAD_NAME:
                 self.LOAD_NAME()
             elif opcode == Bytecodes.LOAD_FAST:
@@ -222,6 +212,6 @@ if __name__ == "__main__":
     import sys
     import dis
 
-    code = frontend.load_pyc_py2(sys.argv[1])
+    code = frontend.rpy_load_py2(sys.argv[1])
     pyframe = PyFrame(code)
     w_x = pyframe.interpret()
