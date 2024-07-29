@@ -2,13 +2,15 @@ from rpython.rlib.rbigint import rbigint
 
 
 class W_Root(object):
-    pass
+    def __init__(self):
+        pass
 
+    def __repr__(self):
+        return "W_Root()"
 
-class W_Object(W_Root):
-    typ = "object"
+    def getrepr(self):
+        return "W_Root()"
 
-    pass
 
 
 class W_None(W_Root):
@@ -18,6 +20,9 @@ class W_None(W_Root):
         pass
 
     def __repr__(self):
+        return self.getrepr()
+
+    def getrepr(self):
         return "None"
 
     def is_true(self):
@@ -31,6 +36,9 @@ class W_Int(W_Root):
         self.value = value
 
     def __repr__(self):
+        return self.getrepr()
+
+    def getrepr(self):
         return "%d" % (self.value)
 
     def getvalue(self):
@@ -81,6 +89,10 @@ class W_Long(W_Root):
     def __init__(self, value):
         self.value = value  # instance of rbigint
 
+
+    def __repr__(self):
+        return self.getrepr()
+
     @staticmethod
     def fromint(intval):
         return W_Long(intval)
@@ -95,8 +107,8 @@ class W_Long(W_Root):
     def getstr(self):
         return str(self.value)
 
-    def __repr__(self):
-        return "%dL" % (self.value)
+    def getrepr(self):
+        return "%dL" % (self.value.toint())
 
     def is_true(self):
         return False # TODO: need to compile with 0
@@ -142,6 +154,9 @@ class W_Str(W_Root):
         self.value = value
 
     def __repr__(self):
+        return "'%s'" % self.value
+
+    def getrepr(self):
         return "'%s'" % self.value
 
     def getvalue(self):
@@ -190,6 +205,9 @@ class W_Byte(W_Root):
     def __repr__(self):
         return "b'%b'" % self.value
 
+    def getrepr(self):
+        return "b'%b'" % self.value
+
     def getvalue(self):
         return self.value
 
@@ -234,9 +252,12 @@ class W_Tuple(W_Sequence):
     typ = "tuple"
 
     def __repr__(self):
+        return self.getrepr()
+
+    def getrepr(self):
         s = "("
         for item in self.values:
-            s += repr(item)
+            s += item.getrepr()
             s += ", "
         s += ")"
         return s
@@ -248,13 +269,16 @@ class W_Tuple(W_Sequence):
 class W_List(W_Sequence):
     typ = "list"
 
-    def __repr__(self):
+    def getrepr(self):
         s = "["
         for item in self.values:
-            s += repr(item)
+            s += item.getrepr()
             s += ", "
         s += "]"
         return s
+
+    def __repr__(self):
+        return self.getrepr()
 
     def is_true(self):
         return len(self.values) != 0
