@@ -1,12 +1,14 @@
 import binascii
-import compiler
 import marshal
+import py
 import struct
 import sys
 import time
 
-from minipypy.tools.log import debug_print
+from rpython.rlib.rfile import create_file
 
+from minipypy.module.marshal import unmarshal_pycode
+from minipypy.tools.log import debug_print
 
 def load_pyc_py3(fname):
     f = open(fname, "rb")
@@ -38,7 +40,7 @@ def load_pyc_py3(fname):
 
 
 def load_pyc_py2(fname):
-    f = open(fname, "rb")
+    f = open(fname, 'rb')
     magic = f.read(4)
     timestamp = f.read(4)
     code = marshal.load(f)
@@ -47,14 +49,23 @@ def load_pyc_py2(fname):
 
 
 def compile_py2(fname):
-    f = open(fname, 'r')
-    code = compile(f.read(), '', 'exec')
+    f = create_file(fname)
+    code = py.code.Source(f.read()).compile()
     f.close()
     return code
 
 
+def rpy_load_py2(fname):
+    f = create_file(fname)
+    magic = f.read(4)
+    timestamp = f.read(4)
+    tc = f.read(1)
+    pycode = unmarshal_pycode(f)
+    f.close()
+    return pycode
+
+
 if __name__ == "__main__":
     import dis
-
-    code = compile_py2(sys.argv[1])
-    # dis.disassemble(code)
+    code = rpy_load_py2(sys.argv[1])
+    dis.disassemble(code.co_code)
