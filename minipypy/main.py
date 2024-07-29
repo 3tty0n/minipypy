@@ -26,6 +26,7 @@ def entry_point(argv):
             jit.set_user_param(None, jitarg)
             del argv[i : i + 2]
             continue
+        i += 1
 
     code = rpy_load_py2(argv[1])
     pyframe = PyFrame(code)
