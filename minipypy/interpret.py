@@ -1,6 +1,8 @@
 import sys
 import types
 
+from rpython.rlib.jit import JitDriver
+
 from minipypy.frontend import rpy_load_py2
 from minipypy.objects.baseobject import *
 from minipypy.objects.pycode import PyCode
@@ -11,9 +13,9 @@ class PyFrame(object):
 
     def __init__(self, code):
         self.code = code
-        self.stack = [None] * 8
+        self.stack = [None] * (code.co_stacksize + 1)
         self.stack_ptr = -1
-        self.locals_cells_stack_w = [None] * 8
+        self.locals_cells_stack_w = [None] * (code.co_stacksize + 1)
         self.pc = 0
         self.locals_w = {}
 
@@ -196,17 +198,20 @@ class PyFrame(object):
 
     def PRINT_ITME(self):
         w_x = self.pop()
-        print w_x,
+        print w_x.getrepr(),
 
     def PRINT_NEWLINE(self):
         print
 
     def interpret(self):
         while self.pc < len(self.code.co_code):
+            jitdriver.jit_merge_point(code=self.code, locals_cells_stack_w=self.locals_cells_stack_w,
+                                      locals_w=self.locals_w, pc=self.pc, stack=self.stack,
+                                      stack_ptr=self.stack_ptr, self=self)
             opcode = ord(self.code.co_code[self.pc])
             self.pc += 1
 
-            print(opcode, opname[opcode], self.stack, self.stack_ptr, self.locals_cells_stack_w)
+            # print(opcode, opname[opcode], self.stack, self.stack_ptr, self.locals_cells_stack_w)
             if opcode == Bytecodes.LOAD_CONST:
                 self.LOAD_CONST()
             elif opcode == Bytecodes.BINARY_ADD:
@@ -270,6 +275,16 @@ class PyFrame(object):
                     self.pc = target
             elif opcode == Bytecodes.STOP_CODE:
                 pass
+
+
+def get_printable_location(pc, code, locals_cells_stack_w, locals_w):
+    opcode = ord(code.co_code[pc])
+    return "%d @ %s" % (pc, opcode)
+
+
+jitdriver = JitDriver(greens=['pc', 'code', 'locals_cells_stack_w', 'locals_w'],
+                      reds=['stack_ptr', 'stack', 'self'],
+                      get_printable_location=get_printable_location)
 
 
 if __name__ == "__main__":
