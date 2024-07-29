@@ -1,7 +1,7 @@
 import sys
 import types
 
-import frontend
+from minipypy.frontend import rpy_load_py2
 from minipypy.objects.baseobject import *
 from minipypy.objects.pycode import PyCode
 from minipypy.opcode27 import Bytecodes, opmap, opname
@@ -15,11 +15,12 @@ class PyFrame(object):
         self.stack_ptr = -1
         self.locals_cells_stack_w = [None] * 8
         self.pc = 0
-        self.env = {}
+        self.locals_w = {}
 
     def pop(self):
         w_x = self.stack[self.stack_ptr]
         self.stack_ptr -= 1
+        assert -1 <= self.stack_ptr
         return w_x
 
     def push(self, w_x):
@@ -46,11 +47,25 @@ class PyFrame(object):
     def POP_TOP(self):
         self.pop()
 
+    def ROT_TWO(self):
+        tos = self.stack[self.stack_ptr]
+        tos2 = self.stack[self.stack_ptr - 1]
+        self.stack[self.stack_ptr] = tos2
+        self.stack[self.stack_ptr - 1] = tos
+
+    def ROT_THREE(self):
+        tos = self.stack[self.stack_ptr]
+        tos2 = self.stack[self.stack_ptr - 1]
+        tos3 = self.stack[self.stack_ptr - 2]
+        self.stack[self.stack_ptr] = tos3
+        self.stack[self.stack_ptr - 1] = tos2
+        self.stack[self.stack_ptr - 2] = tos
+
     def STORE_NAME(self):
         operand1 = self.read_operand()
 
         var = self.code.co_names[operand1]
-        self.env[var] = self.pop()
+        self.locals_w[var] = self.pop()
 
     def STORE_FAST(self):
         operand1 = self.read_operand()
@@ -61,7 +76,7 @@ class PyFrame(object):
         operand1 = self.read_operand()
 
         var = self.code.co_names[operand1]
-        self.push(self.env[var])
+        self.push(self.locals_w[var])
 
     def LOAD_FAST(self):
         operand1 = self.read_operand()
@@ -163,6 +178,22 @@ class PyFrame(object):
         if w_value:
             self.push(w_value)
 
+    def UNPACK_SEQUENCE(self):
+        seqnum = self.read_operand()
+        tos = self.pop()
+        assert isinstance(tos, W_Sequence)
+        seq = tos.values
+        for i in range(seqnum):
+            self.push(seq[len(seq) - (i + 1)])
+
+    def BUILD_TUPLE(self):
+        count = self.read_operand()
+        values = [None] * count
+        for i in range(count):
+            values[count -  i - 1] = self.pop()
+        w_ret = W_Tuple(values)
+        self.push(w_ret)
+
     def PRINT_ITME(self):
         w_x = self.pop()
         print w_x,
@@ -202,6 +233,41 @@ class PyFrame(object):
                 self.CALL_FUNCTION()
             elif opcode == Bytecodes.POP_TOP:
                 self.POP_TOP()
+            elif opcode == Bytecodes.ROT_TWO:
+                self.ROT_TWO()
+            elif opcode == Bytecodes.ROT_THREE:
+                self.ROT_THREE()
+            elif opcode == Bytecodes.UNPACK_SEQUENCE:
+                self.UNPACK_SEQUENCE()
+            elif opcode == Bytecodes.BUILD_TUPLE:
+                self.BUILD_TUPLE()
+            elif opcode == Bytecodes.JUMP_FORWARD:
+                target = self.read_operand()
+                self.pc += target
+            elif opcode == Bytecodes.JUMP_IF_TRUE_OR_POP:
+                tos = self.top()
+                target = self.read_operand()
+                if tos.is_true():
+                    self.pc = target
+                else:
+                    self.pop()
+            elif opcode == Bytecodes.JUMP_IF_FALSE_OR_POP:
+                tos = self.top()
+                target = self.read_operand()
+                if not tos.is_true():
+                    self.pc = target
+                else:
+                    self.pop()
+            elif opcode == Bytecodes.POP_JUMP_IF_TRUE:
+                tos = self.pop()
+                target = self.read_operand()
+                if tos.is_true():
+                    self.pc = target
+            elif opcode == Bytecodes.POP_JUMP_IF_FALSE:
+                tos = self.pop()
+                target = self.read_operand()
+                if not tos.is_true():
+                    self.pc = target
             elif opcode == Bytecodes.STOP_CODE:
                 pass
 
@@ -209,7 +275,9 @@ class PyFrame(object):
 if __name__ == "__main__":
     import sys
     import dis
+    import minipypy.frontend as frontend
 
-    code = frontend.rpy_load_py2(sys.argv[1])
+    code = rpy_load_py2(sys.argv[1])
+    # code = frontend.load_pyc_py2(sys.argv[1])
     pyframe = PyFrame(code)
     w_x = pyframe.interpret()
