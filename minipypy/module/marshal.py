@@ -42,6 +42,16 @@ def get_none(f):
     return None
 
 
+def get_short(f):
+    s = f.read(2)
+    a = ord(s[0])
+    b = ord(s[1])
+    x = a | (b << 8)
+    if x & 0x8000:
+        x = x - 0x10000
+    return x
+
+
 def get_int(f):
     s = f.read(4)
     a = ord(s[0])
@@ -110,7 +120,7 @@ def dispatch(tc, f):
     elif tc == TYPE_LONG:
         return unmarshal_lng(f)
     elif tc == TYPE_STRING:
-        return W_Str(get_str(f))
+        return W_Str.from_str(get_str(f))
     elif tc == TYPE_INTERNED:
         return unmarshal_interned_str(f)
     elif tc == TYPE_STRINGREF:
@@ -122,8 +132,7 @@ def dispatch(tc, f):
     elif tc == TYPE_CODE:
         return unmarshal_pycode(f)
     else:
-        import pdb; pdb.set_trace()
-        raise Exception("Unsupported typecode %c" % tc)
+        raise Exception("Unsupported typecode %s" % tc)
 
 
 def unmarshal_tuple(f):
@@ -131,7 +140,7 @@ def unmarshal_tuple(f):
 
 
 def unmarshal_interned_str(f):
-    w_ret = W_Str(get_str(f))
+    w_ret = W_Str.from_str(get_str(f))
     stringtable_w.append(w_ret)
     return w_ret
 
@@ -158,35 +167,25 @@ def unmarshal_int(f):
 
 
 def unmarshal_lng(f):
-    return W_Long(get_lng(f))
+    from rpython.rlib.rbigint import rbigint
+    lng = get_int(f)
+    if lng < 0:
+        negative = True
+        lng = -lng
+    else:
+        negative = False
+    digits = [get_short(f) for i in range(lng)]
+    result = rbigint.from_list_n_bits(digits, 15)
+    if lng and not result.tobool():
+        raise Exception("bad marshal data")
+    if negative:
+        result = result.neg()
+    return W_Long.from_rbigint(result)
 
 
 def unmarshal_strlist(f, tc):
     lng = atom_lng(f, tc)
     return [unmarshal_str(f) for i in range(lng)]
-
-
-# @unmarshaller(TYPE_CODE)
-# def unmarshal_pycode(space, u, tc):
-#     argcount    = u.get_int()
-#     nlocals     = u.get_int()
-#     stacksize   = u.get_int()
-#     flags       = u.get_int()
-#     code        = unmarshal_str(u)
-#     u.start(TYPE_TUPLE)
-#     consts_w    = u.get_tuple_w()
-#     # copy in order not to merge it with anything else
-#     names       = unmarshal_strlist(u, TYPE_TUPLE)
-#     varnames    = unmarshal_strlist(u, TYPE_TUPLE)
-#     freevars    = unmarshal_strlist(u, TYPE_TUPLE)
-#     cellvars    = unmarshal_strlist(u, TYPE_TUPLE)
-#     filename    = unmarshal_str(u)
-#     name        = unmarshal_str(u)
-#     firstlineno = u.get_int()
-#     lnotab      = unmarshal_str(u)
-#     return PyCode(space, argcount, nlocals, stacksize, flags,
-#                   code, consts_w[:], names, varnames, filename,
-#                   name, firstlineno, lnotab, freevars, cellvars)
 
 
 def unmarshal_pycode(f):
