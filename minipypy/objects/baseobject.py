@@ -20,6 +20,9 @@ class W_None(W_Root):
     def __repr__(self):
         return "None"
 
+    def is_true(self):
+        return False
+
 
 class W_Int(W_Root):
     typ = "int"
@@ -35,6 +38,9 @@ class W_Int(W_Root):
 
     def getstr(self):
         return str(self.value)
+
+    def is_true(self):
+        return self.value == 0
 
     def add(self, other):
         if isinstance(other, W_Int):
@@ -91,6 +97,9 @@ class W_Long(W_Root):
 
     def __repr__(self):
         return "%dL" % (self.value)
+
+    def is_true(self):
+        return False # TODO: need to compile with 0
 
     def add(self, other):
         if isinstance(other, W_Int):
@@ -184,6 +193,9 @@ class W_Byte(W_Root):
     def getvalue(self):
         return self.value
 
+    def is_true(self):
+        return False
+
     @staticmethod
     def from_str(strval):
         assert isinstance(strval, str)
@@ -224,10 +236,13 @@ class W_Tuple(W_Sequence):
     def __repr__(self):
         s = "("
         for item in self.values:
-            s += repr(s)
+            s += repr(item)
             s += ", "
         s += ")"
         return s
+
+    def is_true(self):
+        return len(self.values) != 0
 
 
 class W_List(W_Sequence):
@@ -236,10 +251,13 @@ class W_List(W_Sequence):
     def __repr__(self):
         s = "["
         for item in self.values:
-            s += repr(s)
+            s += repr(item)
             s += ", "
         s += "]"
         return s
+
+    def is_true(self):
+        return len(self.values) != 0
 
 
 class W_Code(W_Root):
