@@ -6,10 +6,13 @@ import sys
 import time
 
 from rpython.rlib.rfile import create_file
+from rpython.rlib.jit import not_rpython
 
 from minipypy.module.marshal import unmarshal_pycode
 from minipypy.tools.log import debug_print
 
+
+@not_rpython
 def load_pyc_py3(fname):
     f = open(fname, "rb")
     magic = f.read(4)
@@ -39,8 +42,9 @@ def load_pyc_py3(fname):
     return code
 
 
+@not_rpython
 def load_pyc_py2(fname):
-    f = open(fname, 'rb')
+    f = open(fname, "rb")
     magic = f.read(4)
     timestamp = f.read(4)
     code = marshal.load(f)
@@ -48,6 +52,7 @@ def load_pyc_py2(fname):
     return code
 
 
+@not_rpython
 def compile_py2(fname):
     f = create_file(fname)
     code = py.code.Source(f.read()).compile()
