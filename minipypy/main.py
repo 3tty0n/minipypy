@@ -32,12 +32,12 @@ def entry_point(argv):
     pyframe = PyFrame(code)
     w_x = pyframe.interpret()
 
-    return 1
+    return 0
 
 # _____ Define and setup target ___
 
 def target(driver, _args):
-    driver.exe_name = "minipypy"
+    driver.exe_name = "targetminipypy"
     return entry_point, None
 
 
