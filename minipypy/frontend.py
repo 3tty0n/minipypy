@@ -5,12 +5,11 @@ import struct
 import sys
 import time
 
+from rpython.rlib.debug import debug_print
 from rpython.rlib.rfile import create_file
 from rpython.rlib.jit import not_rpython
 
 from minipypy.module.marshal import unmarshal_pycode
-from minipypy.tools.log import debug_print
-
 
 @not_rpython
 def load_pyc_py3(fname):
