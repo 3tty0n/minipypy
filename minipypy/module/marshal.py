@@ -1,7 +1,7 @@
 from rpython.rlib.rarithmetic import intmask
 
 from minipypy.objects.pycode import PyCode
-from minipypy.objects.baseobject import W_None, W_Str, W_Int, W_Long, W_Tuple, W_List
+from minipypy.objects.baseobject import *
 
 TYPE_NULL = "0"
 TYPE_NONE = "N"
@@ -120,7 +120,7 @@ def dispatch(tc, f):
     elif tc == TYPE_LONG:
         return unmarshal_lng(f)
     elif tc == TYPE_STRING:
-        return W_Str.from_str(get_str(f))
+        return W_StrObject.from_str(get_str(f))
     elif tc == TYPE_INTERNED:
         return unmarshal_interned_str(f)
     elif tc == TYPE_STRINGREF:
@@ -136,11 +136,11 @@ def dispatch(tc, f):
 
 
 def unmarshal_tuple(f):
-    return W_Tuple(get_tuple(f))
+    return W_TupleObject(get_tuple(f))
 
 
 def unmarshal_interned_str(f):
-    w_ret = W_Str.from_str(get_str(f))
+    w_ret = W_StrObject.from_str(get_str(f))
     stringtable_w.append(w_ret)
     return w_ret
 
@@ -159,15 +159,16 @@ def unmarshal_str(f):
 
 
 def unmarshal_none(f):
-    return W_None()
+    return W_NoneObject.W_None
 
 
 def unmarshal_int(f):
-    return W_Int(get_int(f))
+    return W_IntObject(get_int(f))
 
 
 def unmarshal_lng(f):
     from rpython.rlib.rbigint import rbigint
+
     lng = get_int(f)
     if lng < 0:
         negative = True
@@ -180,7 +181,7 @@ def unmarshal_lng(f):
         raise Exception("bad marshal data")
     if negative:
         result = result.neg()
-    return W_Long.from_rbigint(result)
+    return W_LongObject.from_rbigint(result)
 
 
 def unmarshal_strlist(f, tc):
@@ -189,22 +190,34 @@ def unmarshal_strlist(f, tc):
 
 
 def unmarshal_pycode(f):
-    argcount    = get_int(f)
-    nlocals     = get_int(f)
-    stacksize   = get_int(f)
-    flags       = get_int(f)
-    code        = atom_str(f)
+    argcount = get_int(f)
+    nlocals = get_int(f)
+    stacksize = get_int(f)
+    flags = get_int(f)
+    code = atom_str(f)
     start(f, TYPE_TUPLE)
-    consts      = get_tuple(f)
-    names       = unmarshal_strlist(f, TYPE_TUPLE)
-    varnames    = unmarshal_strlist(f, TYPE_TUPLE)
-    freevars    = unmarshal_strlist(f, TYPE_TUPLE)
-    cellvars    = unmarshal_strlist(f, TYPE_TUPLE)
-    filename    = unmarshal_str(f)
-    name        = unmarshal_str(f)
+    consts = get_tuple(f)
+    names = unmarshal_strlist(f, TYPE_TUPLE)
+    varnames = unmarshal_strlist(f, TYPE_TUPLE)
+    freevars = unmarshal_strlist(f, TYPE_TUPLE)
+    cellvars = unmarshal_strlist(f, TYPE_TUPLE)
+    filename = unmarshal_str(f)
+    name = unmarshal_str(f)
     firstlineno = get_int(f)
-    lnotab      = unmarshal_str(f)
+    lnotab = unmarshal_str(f)
     return PyCode(
-        argcount, nlocals, stacksize, flags, code, consts, names, varnames, freevars, cellvars,
-        filename, name, firstlineno, lnotab
+        argcount,
+        nlocals,
+        stacksize,
+        flags,
+        code,
+        consts,
+        names,
+        varnames,
+        freevars,
+        cellvars,
+        filename,
+        name,
+        firstlineno,
+        lnotab,
     )
