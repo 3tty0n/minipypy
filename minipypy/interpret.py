@@ -431,7 +431,7 @@ class PyFrame(W_RootObject):
         self = hint(self, access_directly=True)
         self.pc = r_uint(self.pc)
 
-        while next_instr < len(self.code.co_code):
+        while self.pc < len(self.code.co_code):
             jitdriver.jit_merge_point(
                 code=self.code.co_code,
                 pc=self.pc,
