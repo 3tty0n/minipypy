@@ -1,6 +1,7 @@
 i = 0
 while i < 100:
-    x = 0
     i += 1
-
-print "exit"
+    j = 0
+    while j < 100:
+        j += 1
+print i
