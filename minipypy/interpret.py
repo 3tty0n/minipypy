@@ -428,9 +428,12 @@ class PyFrame(W_RootObject):
     def interpret(self):
         next_instr = 0
 
+        self = hint(self, access_directly=True)
+        self.pc = r_uint(self.pc)
+
         while next_instr < len(self.code.co_code):
             jitdriver.jit_merge_point(
-                code=self.code,
+                code=self.code.co_code,
                 pc=self.pc,
                 stack=self.stack,
                 valuestackdepth=self.valuestackdepth,
@@ -438,6 +441,8 @@ class PyFrame(W_RootObject):
             )
             opcode = ord(self.code.co_code[self.pc])
             self.pc += 1
+
+            self.valuestackdepth = hint(self.valuestackdepth, promote=True)
 
             # print(
             #     opcode,
@@ -528,7 +533,7 @@ class PyFrame(W_RootObject):
                 self.pc = target
                 jitdriver.can_enter_jit(
                     pc=self.pc,
-                    code=self.code,
+                    code=self.code.co_code,
                     valuestackdepth=self.valuestackdepth,
                     stack=self.stack,
                     self=self,
@@ -541,8 +546,8 @@ class PyFrame(W_RootObject):
 
 
 def get_printable_location(pc, code):
-    opcode = ord(code.co_code[pc])
-    return "%d @ %s" % (pc, opcode)
+    opcode = ord(code[pc])
+    return "%d @ %s" % (pc, opname[opcode])
 
 
 jitdriver = JitDriver(
