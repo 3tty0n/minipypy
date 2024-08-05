@@ -11,6 +11,7 @@ from rpython.rlib.jit import not_rpython
 
 from minipypy.module.marshal import unmarshal_pycode
 
+
 @not_rpython
 def load_pyc_py3(fname):
     f = open(fname, "rb")
@@ -71,5 +72,6 @@ def rpy_load_py2(fname):
 
 if __name__ == "__main__":
     import dis
+
     code = rpy_load_py2(sys.argv[1])
     dis.disassemble(code.co_code)

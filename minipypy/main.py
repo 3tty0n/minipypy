@@ -10,6 +10,7 @@ from rpython.memory.gc.hook import GcHooks
 from minipypy.frontend import rpy_load_py2
 from minipypy.interpret import PyFrame
 
+
 def entry_point(argv):
     is_gc_stats = False
 
@@ -34,7 +35,9 @@ def entry_point(argv):
 
     return 0
 
+
 # _____ Define and setup target ___
+
 
 def target(driver, _args):
     driver.exe_name = "targetminipypy"

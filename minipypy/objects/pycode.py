@@ -1,9 +1,24 @@
-from minipypy.objects.baseobject import W_Root
+from minipypy.objects.baseobject import W_RootObject
 
-class PyCode(W_Root):
-    def __init__(self, argcount, nlocals, stacksize, flags, code,
-                 consts, names, varnames, freevars, cellvars, filename,
-                 name, firstlineno, lnotab):
+
+class PyCode(W_RootObject):
+    def __init__(
+        self,
+        argcount,
+        nlocals,
+        stacksize,
+        flags,
+        code,
+        consts,
+        names,
+        varnames,
+        freevars,
+        cellvars,
+        filename,
+        name,
+        firstlineno,
+        lnotab,
+    ):
         self.co_argcount = argcount
         self.co_nlocals = nlocals
         self.co_stacksize = stacksize
@@ -20,5 +35,9 @@ class PyCode(W_Root):
         self.co_lnotab = lnotab
 
     def __repr__(self):
-        return "<code object %s at %s, file \"%s\", line %d>" % (
-            self.co_name, id(self), self.co_filename, self.co_firstlineno)
+        return '<code object %s at %s, file "%s", line %d>' % (
+            self.co_name,
+            id(self),
+            self.co_filename,
+            self.co_firstlineno,
+        )
