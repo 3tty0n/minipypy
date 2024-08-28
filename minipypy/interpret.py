@@ -1,13 +1,15 @@
 import sys
 
-from rpython.rlib.rarithmetic import intmask, r_uint
 from rpython.rlib import jit
 from rpython.rlib.jit import JitDriver, hint
+from rpython.rlib.debug import ll_assert_not_none
+from rpython.rlib.objectmodel import always_inline
+from rpython.rlib.rarithmetic import intmask, r_uint
 
 from minipypy.frontend import rpy_load_py2
 from minipypy.objects.baseobject import *
 from minipypy.objects.pycode import PyCode
-from minipypy.opcode27 import Bytecodes, opmap, opname
+from minipypy.opcode27 import Bytecodes, opmap, opname, HAVE_ARGUMENT
 
 
 class OpcodeNotImplementedError(RuntimeError):
@@ -60,6 +62,9 @@ class SBreakLoop(SuspendedUnroller):
 
     _immutable_ = True
     kind = 0x04
+
+    def __init__(self):
+        pass
 
 
 SBreakLoop.singleton = SBreakLoop()
@@ -146,29 +151,44 @@ class LoopBlock(FrameBlock):
 
 
 class PyFrame(W_RootObject):
+    _virtualizable_ = [
+        "last_intr", "code",
+        "valuestackdepth",
+        "locals_cells_stack_w[*]?",
+        "w_locals"
+    ]
 
     def __init__(self, code):
+        self = hint(self, force_virtualizable=True, access_directly=True)
+        assert isinstance(code, PyCode)
         self.code = code
-        self.stack = [None] * (code.co_stacksize + 1)
+        self.locals_cells_stack_w = [None] * 8
         self.valuestackdepth = 0
-        self.locals_cells_stack_w = [None] * (code.co_stacksize + 1)
-        self.pc = 0
-        self.locals_w = {}
+        self.last_instr = -1
+        self.w_locals = {}
 
         self.lastblock = None
 
+    def getcode(self):
+        return hint(self.code, promote=True)
+
+    def getco_code(self):
+        return hint(self.getcode().co_code, promote_string=True)
+
     def pop(self):
-        self.valuestackdepth -= 1
-        w_x = self.stack[self.valuestackdepth]
-        assert -1 < self.valuestackdepth
+        valuestackdepth = self.valuestackdepth - 1
+        assert valuestackdepth >= 0
+        w_x = self.locals_cells_stack_w[valuestackdepth]
+        self.locals_cells_stack_w[valuestackdepth] = None
+        self.valuestackdepth = valuestackdepth
         return w_x
 
     def push(self, w_x):
-        self.stack[self.valuestackdepth] = w_x
+        self.locals_cells_stack_w[self.valuestackdepth] = w_x
         self.valuestackdepth += 1
 
     def top(self):
-        return self.stack[self.valuestackdepth]
+        return self.locals_cells_stack_w[self.valuestackdepth]
 
     @jit.unroll_safe
     def dropvaluesuntil(self, finaldepth):
@@ -192,125 +212,154 @@ class PyFrame(W_RootObject):
     def create_pyframe(self, code, args):
         pyframe = PyFrame(code)
         for i in range(len(args)):
+            assert i >= 0
             pyframe.locals_cells_stack_w[i] = args[i]
+            pyframe.valuestackdepth += 1
+        pyframe.code.frame_stores_global(self.getcode().w_globals)
         return pyframe
 
     def read_const(self, operand):
-        return self.code.co_consts[operand]
+        return self.getcode().co_consts[operand]
 
-    def read_operand(self):
-        lo = ord(self.code.co_code[self.pc])
-        hi = ord(self.code.co_code[self.pc + 1])
-        self.pc += 2
-        oparg = (hi * 256) | lo
-        return oparg
-
-    def POP_TOP(self):
+    def POP_TOP(self, oparg, next_instr):
         self.pop()
 
-    def ROT_TWO(self):
-        tos = self.stack[self.valuestackdepth]
-        tos2 = self.stack[self.valuestackdepth - 1]
-        self.stack[self.valuestackdepth] = tos2
-        self.stack[self.valuestackdepth - 1] = tos
+    def ROT_TWO(self, oparg, next_instr):
+        tos = self.pop()
+        tos2 = self.pop()
+        self.push(tos2)
+        self.push(tos)
 
-    def ROT_THREE(self):
-        tos = self.stack[self.valuestackdepth]
-        tos2 = self.stack[self.valuestackdepth - 1]
-        tos3 = self.stack[self.valuestackdepth - 2]
-        self.stack[self.valuestackdepth] = tos3
-        self.stack[self.valuestackdepth - 1] = tos2
-        self.stack[self.valuestackdepth - 2] = tos
+    def ROT_THREE(self, oparg, next_instr):
+        assert self.valuestackdepth - 2 >= 0
+        tos = self.pop()
+        tos2 = self.pop()
+        tos3 = self.pop()
+        self.push(tos)
+        self.push(tos2)
+        self.push(tos3)
 
-    def STORE_NAME(self):
-        operand1 = self.read_operand()
+    def STORE_NAME(self, oparg, next_instr):
+        var = self.getcode().co_names[oparg]
+        assert var is not None
+        # TODO: make this w_globals immutable
+        w_value = self.pop()
+        self.getcode().setitem(var, w_value)
 
-        var = self.code.co_names[operand1]
-        self.locals_w[var] = self.pop()
+    def STORE_FAST(self, oparg, next_instr):
+        assert oparg >= 0
+        self.locals_cells_stack_w[oparg] = self.pop()
 
-    def STORE_FAST(self):
-        operand1 = self.read_operand()
-        w_x = self.pop()
-        self.locals_cells_stack_w[operand1] = w_x
+    def STORE_GLOBAL(self, oparg, next_instr):
+        co_names = hint(self.getcode().co_names, promote=True)
+        name = co_names[oparg]
+        w_value = self.pop()
+        self.getcode().setitem(name, w_value)
 
-    def LOAD_NAME(self):
-        operand1 = self.read_operand()
+    def LOAD_NAME(self, oparg, next_instr):
+        co_names = hint(self.getcode().co_names, promote=True)
+        assert oparg >= 0
+        name = co_names[oparg]
 
-        var = self.code.co_names[operand1]
-        self.push(self.locals_w[var])
-
-    def LOAD_FAST(self):
-        operand1 = self.read_operand()
-        w_x = self.locals_cells_stack_w[operand1]
-        self.push(w_x)
-
-    def LOAD_CONST(self):
-        operand1 = self.read_operand()
-
-        const = self.read_const(operand1)
-        if not const:
-            self.push(W_NoneObject.W_None)
-        elif isinstance(const, W_RootObject):
-            self.push(const)
+        w_result = W_NoneObject.W_None
+        if name in self.w_locals:
+            w_result = self.w_locals[name]
         else:
-            raise Exception("Unimplemented pattern", const)
+            if name in self.getcode().w_globals:
+                w_result = self.getcode().w_globals[name]
 
-    def BINARY_POWER(self):
+        if w_result.is_none():
+            raise BytecodeCorruption("LOAD_NAME is failed")
+        self.push(w_result)
+
+
+    @always_inline
+    def LOAD_FAST(self, oparg, next_instr):
+        assert oparg >= 0
+        w_value = self.locals_cells_stack_w[oparg]
+        if w_value is None:
+            raise BytecodeCorruption("LOAD_FAST is failed")
+        self.push(w_value)
+
+    def LOAD_CONST(self, oparg, next_instr):
+        const = self.read_const(oparg)
+        self.push(const)
+
+    def LOAD_GLOBAL(self, oparg, next_instr):
+        co_names = hint(self.getcode().co_names, promote=True)
+        name = co_names[oparg]
+
+        w_result = W_NoneObject.W_None
+        # search w_locals
+        if name in self.w_locals:
+            w_result = self.w_locals[name]
+        else:
+            # search w_globals
+            w_globals = self.getcode().w_globals
+            if name in w_globals:
+                w_result = w_globals[name]
+
+        if w_result.is_none():
+            raise BytecodeCorruption("name %s cannot be found in w_locals and w_globals" % name)
+        self.push(w_result)
+
+
+    def BINARY_POWER(self, oparg, next_instr):
         w_y = self.pop()
         w_x = self.pop()
         w_z = w_x.power(w_y)
         self.push(w_z)
 
-    def BINARY_MULTIPLY(self):
+    def BINARY_MULTIPLY(self, oparg, next_instr):
         w_y = self.pop()
         w_x = self.pop()
         w_z = w_x.mul(w_y)
         self.push(w_z)
 
-    def BINARY_DIVIDE(self):
+    def BINARY_DIVIDE(self, oparg, next_instr):
         w_y = self.pop()
         w_x = self.pop()
         w_z = w_x.div(w_y)
         self.push(w_z)
 
-    def BINARY_MODULO(self):
+    def BINARY_MODULO(self, oparg, next_instr):
         w_y = self.pop()
         w_x = self.pop()
         w_z = w_x.mod(w_y)
         self.push(w_z)
 
-    def BINARY_ADD(self):
+    def BINARY_ADD(self, oparg, next_instr):
         w_y = self.pop()
         w_x = self.pop()
         w_z = w_x.add(w_y)
         self.push(w_z)
 
-    def BINARY_SUBTRACT(self):
+    def BINARY_SUBTRACT(self, oparg, next_instr):
         w_y = self.pop()
         w_x = self.pop()
         w_z = w_x.sub(w_y)
         self.push(w_z)
 
-    def BINARY_SUBSCR(self):
+    def BINARY_SUBSCR(self, oparg, next_instr):
         w_y = self.pop()
         w_x = self.pop()
         w_z = w_x.subscr(w_y)
         self.push(w_z)
 
-    def BINARY_FLOOR_DIVIDE(self):
+    def BINARY_FLOOR_DIVIDE(self, oparg, next_instr):
         w_y = self.pop()
         w_x = self.pop()
         w_z = w_x.div(w_y)  # TODO: floor
         self.push(w_z)
 
-    def BINARY_TRUE_DIVIDE(self):
+    def BINARY_TRUE_DIVIDE(self, oparg, next_instr):
         w_y = self.pop()
         w_x = self.pop()
         w_z = w_x.true_div(w_y)
         self.push(w_z)
 
-    def COMPARE_OP(self):
-        opnum = self.read_operand()
+    def COMPARE_OP(self, oparg, next_instr):
+        opnum = oparg
         w_2 = self.pop()
         w_1 = self.pop()
         if opnum == 0:  # <
@@ -339,45 +388,43 @@ class PyFrame(W_RootObject):
             raise BytecodeCorruption("Bad cmp op: %d" % (opnum))
         self.push(w_result)
 
-    def INPLACE_ADD(self):
+    def INPLACE_ADD(self, oparg, next_instr):
         w_tos = self.pop()
         w_tos1 = self.pop()
         w_result = w_tos1.add(w_tos)
         self.push(w_result)
 
-    def INPLACE_SUBTRACT(self):
+    def INPLACE_SUBTRACT(self, oparg, next_instr):
         w_tos = self.pop()
         w_tos1 = self.pop()
         w_result = w_tos1.sub(w_tos)
         self.push(w_result)
 
-    def INPLACE_MULTIPLY(self):
+    def INPLACE_MULTIPLY(self, oparg, next_instr):
         w_tos = self.pop()
         w_tos1 = self.pop()
         w_result = w_tos1.mul(w_tos)
         self.push(w_result)
 
-    def INPLACE_DIVIDE(self):
+    def INPLACE_DIVIDE(self, oparg, next_instr):
         w_tos = self.pop()
         w_tos1 = self.pop()
         w_result = w_tos1.div(w_tos)
         self.push(w_result)
 
-    def RETURN_VALUE(self):
+    def RETURN_VALUE(self, oparg, next_instr):
         return self.pop()
 
-    def SETUP_LOOP(self):
-        offsettoend = self.read_operand()
-        block = LoopBlock(self, self.pc + offsettoend, self.lastblock)
+    def SETUP_LOOP(self, oparg, next_instr):
+        block = LoopBlock(self, next_instr + oparg, self.lastblock)
         self.lastblock = block
 
-    def POP_BLOCK(self):
+    def POP_BLOCK(self, oparg, next_instr):
         block = self.pop_block()
         block.cleanup(self)  # the block knows how to clean up the value stack
 
-    def MAKE_FUNCTION(self):
-        argc = self.read_operand()
-
+    def MAKE_FUNCTION(self, oparg, next_instr):
+        argc = oparg
         code = self.pop()
         arg_defaults = [None] * argc
         i = 0
@@ -387,9 +434,8 @@ class PyFrame(W_RootObject):
         w_function = W_FunctionObject(code, arg_defaults)
         self.push(w_function)
 
-    def CALL_FUNCTION(self):
-        argc = self.read_operand()
-
+    def CALL_FUNCTION(self, oparg, next_instr):
+        argc = oparg
         kwnum = argc >> 8
         argnum = argc & 0xFF
         args = [None] * argnum
@@ -402,160 +448,161 @@ class PyFrame(W_RootObject):
         if w_value:
             self.push(w_value)
 
-    def UNPACK_SEQUENCE(self):
-        seqnum = self.read_operand()
+    def UNPACK_SEQUENCE(self, oparg, next_instr):
         tos = self.pop()
         assert isinstance(tos, W_SequenceObject)
         seq = tos.value
-        for i in range(seqnum):
+        for i in range(oparg):
             self.push(seq[len(seq) - (i + 1)])
 
-    def BUILD_TUPLE(self):
-        count = self.read_operand()
+    def BUILD_TUPLE(self, oparg, next_instr):
+        count = oparg
         values = [None] * count
         for i in range(count):
             values[count - i - 1] = self.pop()
         w_ret = W_TupleObject(values)
         self.push(w_ret)
 
-    def PRINT_ITME(self):
+    def PRINT_ITME(self, oparg, next_instr):
         w_x = self.pop()
         print w_x.getrepr(),  # fmt: skip
 
-    def PRINT_NEWLINE(self):
+    def PRINT_NEWLINE(self, oparg, next_instr):
         print  # fmt: skip
 
     def interpret(self):
-        next_instr = 0
+        next_instr = r_uint(self.last_instr + 1)
+        oparg = r_uint(0)
 
-        self = hint(self, access_directly=True)
-        self.pc = r_uint(self.pc)
-
-        while self.pc < len(self.code.co_code):
+        while next_instr < len(self.getco_code()):
             jitdriver.jit_merge_point(
-                code=self.code.co_code,
-                pc=self.pc,
-                stack=self.stack,
+                next_instr=next_instr,
+                code=self.getcode(),
                 valuestackdepth=self.valuestackdepth,
                 self=self,
             )
-            opcode = ord(self.code.co_code[self.pc])
-            self.pc += 1
+            co_code = self.getco_code()
+            opcode = ord(co_code[next_instr])
+            next_instr += 1
+
+            if HAVE_ARGUMENT <= opcode:
+                lo = ord(co_code[next_instr])
+                hi = ord(co_code[next_instr+1])
+                next_instr += 2
+                oparg = (hi * 256) | lo
+            else:
+                oparg = r_uint(0)
 
             self.valuestackdepth = hint(self.valuestackdepth, promote=True)
 
-            # print(
-            #     opcode,
-            #     opname[opcode],
-            #     self.pc,
-            #     self.stack,
-            #     self.valuestackdepth,
-            #     self.locals_cells_stack_w,
-            # )
+            if not jit.we_are_translated():
+                print(
+                    opcode,
+                    next_instr,
+                    opname[opcode],
+                    self.locals_cells_stack_w,
+                    self.valuestackdepth,
+                    self.getcode().w_globals,
+                )
             if opcode == Bytecodes.BINARY_ADD:
-                self.BINARY_ADD()
+                self.BINARY_ADD(oparg, next_instr)
             elif opcode == Bytecodes.BINARY_DIVIDE:
-                self.BINARY_DIVIDE()
+                self.BINARY_DIVIDE(oparg, next_instr)
             elif opcode == Bytecodes.BINARY_SUBTRACT:
-                self.BINARY_SUBTRACT()
+                self.BINARY_SUBTRACT(oparg, next_instr)
             elif opcode == Bytecodes.BINARY_MULTIPLY:
-                self.BINARY_MULTIPLY()
+                self.BINARY_MULTIPLY(oparg, next_instr)
             elif opcode == Bytecodes.BINARY_TRUE_DIVIDE:
-                self.BINARY_TRUE_DIVIDE()
+                self.BINARY_TRUE_DIVIDE(oparg, next_instr)
             elif opcode == Bytecodes.BUILD_TUPLE:
-                self.BUILD_TUPLE()
+                self.BUILD_TUPLE(oparg, next_instr)
             elif opcode == Bytecodes.COMPARE_OP:
-                self.COMPARE_OP()
+                self.COMPARE_OP(oparg, next_instr)
             elif opcode == Bytecodes.INPLACE_ADD:
-                self.INPLACE_ADD()
+                self.INPLACE_ADD(oparg, next_instr)
             elif opcode == Bytecodes.INPLACE_SUBTRACT:
-                self.INPLACE_SUBTRACT()
+                self.INPLACE_SUBTRACT(oparg, next_instr)
             elif opcode == Bytecodes.INPLACE_DIVIDE:
-                self.INPLACE_DIVIDE()
+                self.INPLACE_DIVIDE(oparg, next_instr)
             elif opcode == Bytecodes.LOAD_NAME:
-                self.LOAD_NAME()
+                self.LOAD_NAME(oparg, next_instr)
             elif opcode == Bytecodes.LOAD_FAST:
-                self.LOAD_FAST()
+                self.LOAD_FAST(oparg, next_instr)
             elif opcode == Bytecodes.LOAD_CONST:
-                self.LOAD_CONST()
+                self.LOAD_CONST(oparg, next_instr)
+            elif opcode == Bytecodes.LOAD_GLOBAL:
+                self.LOAD_GLOBAL(oparg, next_instr)
             elif opcode == Bytecodes.PRINT_ITEM:
-                self.PRINT_ITME()
+                self.PRINT_ITME(oparg, next_instr)
             elif opcode == Bytecodes.PRINT_NEWLINE:
-                self.PRINT_NEWLINE()
+                self.PRINT_NEWLINE(oparg, next_instr)
             elif opcode == Bytecodes.RETURN_VALUE:
-                return self.RETURN_VALUE()
+                return self.RETURN_VALUE(oparg, next_instr)
             elif opcode == Bytecodes.SETUP_LOOP:
-                self.SETUP_LOOP()
+                self.SETUP_LOOP(oparg, next_instr)
             elif opcode == Bytecodes.STORE_NAME:
-                self.STORE_NAME()
+                self.STORE_NAME(oparg, next_instr)
             elif opcode == Bytecodes.STORE_FAST:
-                self.STORE_FAST()
+                self.STORE_FAST(oparg, next_instr)
+            elif opcode == Bytecodes.STORE_GLOBAL:
+                self.STORE_GLOBAL(oparg, next_instr)
             elif opcode == Bytecodes.POP_BLOCK:
-                self.POP_BLOCK()
+                self.POP_BLOCK(oparg, next_instr)
             elif opcode == Bytecodes.MAKE_FUNCTION:
-                self.MAKE_FUNCTION()
+                self.MAKE_FUNCTION(oparg, next_instr)
             elif opcode == Bytecodes.CALL_FUNCTION:
-                self.CALL_FUNCTION()
+                self.CALL_FUNCTION(oparg, next_instr)
             elif opcode == Bytecodes.POP_TOP:
-                self.POP_TOP()
+                self.POP_TOP(oparg, next_instr)
             elif opcode == Bytecodes.ROT_TWO:
-                self.ROT_TWO()
+                self.ROT_TWO(oparg, next_instr)
             elif opcode == Bytecodes.ROT_THREE:
-                self.ROT_THREE()
+                self.ROT_THREE(oparg, next_instr)
             elif opcode == Bytecodes.UNPACK_SEQUENCE:
-                self.UNPACK_SEQUENCE()
+                self.UNPACK_SEQUENCE(oparg, next_instr)
             elif opcode == Bytecodes.JUMP_IF_TRUE_OR_POP:
                 tos = self.top()
-                target = self.read_operand()
                 if tos.is_true():
-                    self.pc = target
+                    next_instr = oparg
                 else:
                     self.pop()
             elif opcode == Bytecodes.JUMP_IF_FALSE_OR_POP:
                 tos = self.top()
-                target = self.read_operand()
                 if not tos.is_true():
-                    self.pc = target
+                    next_instr = oparg
                 else:
                     self.pop()
             elif opcode == Bytecodes.POP_JUMP_IF_TRUE:
                 tos = self.pop()
-                target = self.read_operand()
                 if tos.is_true():
-                    self.pc = target
+                    next_instr = oparg
             elif opcode == Bytecodes.POP_JUMP_IF_FALSE:
                 tos = self.pop()
-                target = self.read_operand()
                 if not tos.is_true():
-                    self.pc = target
+                    next_instr = oparg
             elif opcode == Bytecodes.JUMP_ABSOLUTE:
-                target = self.read_operand()
-                self.pc = target
+                next_instr = oparg
                 jitdriver.can_enter_jit(
-                    pc=self.pc,
-                    code=self.code.co_code,
+                    next_instr=next_instr,
+                    code=self.getcode(),
                     valuestackdepth=self.valuestackdepth,
-                    stack=self.stack,
                     self=self,
                 )
             elif opcode == Bytecodes.JUMP_FORWARD:
-                target = self.read_operand()
-                self.pc += target
+                next_instr += oparg
             elif opcode == Bytecodes.STOP_CODE:
                 pass
 
 
-def get_printable_location(pc, code):
-    opcode = ord(code[pc])
-    return "%d @ %s" % (pc, opname[opcode])
+def get_printable_location(next_instr, code):
+    opcode = ord(code.co_code[next_instr])
+    return "%d @ %s" % (next_instr, opname[opcode])
 
 
 jitdriver = JitDriver(
-    greens=[
-        "pc",
-        "code",
-    ],
-    reds=["valuestackdepth", "stack", "self"],
+    greens=["next_instr", "code",],
+    reds=["valuestackdepth", "self"],
+    virtualizables=["self"],
     get_printable_location=get_printable_location,
 )
 
@@ -563,6 +610,8 @@ if __name__ == "__main__":
     import sys
     import dis
     import minipypy.frontend as frontend
+
+    setup_prebuilt()
 
     code = rpy_load_py2(sys.argv[1])
     pyframe = PyFrame(code)
