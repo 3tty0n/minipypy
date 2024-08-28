@@ -435,6 +435,7 @@ class PyFrame(W_RootObject):
         w_function = W_FunctionObject(code, arg_defaults)
         self.push(w_function)
 
+    @jit.unroll_safe
     def CALL_FUNCTION(self, oparg, next_instr):
         argc = oparg
         kwnum = argc >> 8
@@ -471,6 +472,7 @@ class PyFrame(W_RootObject):
     def PRINT_NEWLINE(self, oparg, next_instr):
         print  # fmt: skip
 
+    @jit.unroll_safe
     def interpret(self):
         next_instr = r_uint(self.last_instr + 1)
         oparg = r_uint(0)
