@@ -9,9 +9,12 @@ from rpython.memory.gc.hook import GcHooks
 
 from minipypy.frontend import rpy_load_py2
 from minipypy.interpret import PyFrame
+from minipypy.objects.baseobject import setup_prebuilt
 
 
 def entry_point(argv):
+    setup_prebuilt()
+
     is_gc_stats = False
 
     i = 0

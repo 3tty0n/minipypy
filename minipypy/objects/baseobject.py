@@ -2,6 +2,14 @@ import operator
 
 from rpython.rlib import jit
 from rpython.rlib.rbigint import rbigint
+from rpython.rlib.objectmodel import instantiate
+
+prebuilt_from = 0
+prebuilt_to = 100
+
+
+def within_prebuilt_index(i):
+    return prebuilt_from <= i < prebuilt_to
 
 
 class WObjectOperationException(RuntimeError):
@@ -12,14 +20,22 @@ WObjectOperationNotImplemented = WObjectOperationException("Not implemented")
 
 
 class W_RootObject(object):
+    # TODO: workaround
+    # _immutable_fields_ = ["co_code", "co_consts[*]", "co_names[*]",]
+
     def __repr__(self):
         return "W_RootObject()"
 
     def getrepr(self):
         return "W_RootObject()"
 
+    def is_none(self):
+        return False
+
 
 class W_NoneObject(W_RootObject):
+    _immutable_fields_ = ["value"]
+
     def __init__(self, value):
         self.value = value
 
@@ -32,11 +48,16 @@ class W_NoneObject(W_RootObject):
     def is_true(self):
         return False
 
+    def is_none(self):
+        return True
+
 
 W_NoneObject.W_None = W_NoneObject(None)
 
 
 class W_BoolObject(W_RootObject):
+    _immutable_fields_ = ["value"]
+
     def __init__(self, value):
         self.value = value
 
@@ -73,8 +94,11 @@ W_BoolObject.W_False = W_BoolObject(False)
 
 
 class W_IntObject(W_RootObject):
+    _immutable_fields_ = ["value"]
+    PREBUILT = []
+
     def __init__(self, value):
-        self.value = value
+        self.value = int(value)
 
     def __repr__(self):
         return self.getrepr()
@@ -82,6 +106,7 @@ class W_IntObject(W_RootObject):
     def getrepr(self):
         return "%d" % (self.value)
 
+    @jit.elidable
     def getvalue(self):
         return self.value
 
@@ -93,19 +118,31 @@ class W_IntObject(W_RootObject):
 
     @staticmethod
     def from_int(i):
-        return W_IntObject(i)
+        w_result = instantiate(W_IntObject)
+        w_result.value = i
+        return w_result
 
     def add(self, other):
         if isinstance(other, W_IntObject):
-            return W_IntObject(self.value + other.getvalue())
+            return self.add_int_int(other)
         elif isinstance(other, W_LongObject):
-            return W_LongObject(rbigint.fromint(self.value).add(other.getvalue()))
+            return self.add_int_long(other)
         else:
             raise WObjectOperationException("Unexpected object: %s" % (other))
 
+    def add_int_int(self, other):
+        x = self.value
+        y = other.value
+        return W_IntObject(x + y)
+
+    def add_int_long(self, other):
+        x = self.value
+        y = other.value
+        return W_LongObject(rbigint.fromint(x).add(y))
+
     def sub(self, other):
         if isinstance(other, W_IntObject):
-            return W_IntObject(self.value - other.getvalue())
+            return W_IntObject(self.value - other.value)
         elif isinstance(other, W_LongObject):
             return W_LongObject(rbigint.fromint(self.value).sub(other.getvalue()))
         else:
@@ -121,7 +158,7 @@ class W_IntObject(W_RootObject):
 
     def div(self, other):
         if isinstance(other, W_IntObject):
-            return W_IntObject(self.value / other.getvalue())
+            return W_IntObject(self.value / other.value)
         elif isinstance(other, W_LongObject):
             return W_LongObject(rbigint.fromint(self.value).div(other.getvalue()))
         else:
@@ -134,25 +171,25 @@ class W_IntObject(W_RootObject):
         if isinstance(other, W_NoneObject):
             return W_BoolObject.W_False
         if isinstance(other, W_IntObject):
-            return W_BoolObject.from_bool(self.getvalue() == other.getvalue())
+            return W_BoolObject.from_bool(self.value == other.value)
         if isinstance(other, W_LongObject):
-            return W_BoolObject.from_bool(self.getvalue() == other.getvalue().toint())
+            return W_BoolObject.from_bool(self.value == other.value.toint())
         return W_BoolObject.W_True
 
     def lt(self, other):
         if isinstance(other, W_NoneObject):
             return W_BoolObject.W_False
         if isinstance(other, W_IntObject):
-            return W_BoolObject.from_bool(self.getvalue() < other.getvalue())
+            return W_BoolObject.from_bool(self.value < other.value)
         if isinstance(other, W_LongObject):
-            return W_BoolObject.from_bool(self.getvalue() < other.getvalue().toint())
+            return W_BoolObject.from_bool(self.value < other.value.toint())
         return W_BoolObject.W_True
 
     def le(self, other):
         if isinstance(other, W_IntObject):
-            return W_BoolObject.from_bool(self.getvalue() <= other.getvalue())
+            return W_BoolObject.from_bool(self.value <= other.value)
         if isinstance(other, W_LongObject):
-            return W_BoolObject.from_bool(self.getvalue() <= other.getvalue().toint())
+            return W_BoolObject.from_bool(self.value <= other.value.toint())
         if isinstance(other, W_NoneObject):
             return W_BoolObject.W_False
         return W_BoolObject.W_True
@@ -161,22 +198,25 @@ class W_IntObject(W_RootObject):
         if isinstance(other, W_NoneObject):
             return W_BoolObject.W_False
         if isinstance(other, W_IntObject):
-            return W_BoolObject.from_bool(self.getvalue() > other.getvalue())
+            return W_BoolObject.from_bool(self.value > other.value)
         if isinstance(other, W_LongObject):
-            return W_BoolObject.from_bool(self.getvalue() > other.getvalue().toint())
+            return W_BoolObject.from_bool(self.value > other.value.toint())
         return W_BoolObject.W_True
 
     def ge(self, other):
         if isinstance(other, W_NoneObject):
             return W_BoolObject.W_False
         if isinstance(other, W_IntObject):
-            return W_BoolObject.from_bool(self.getvalue() >= other.getvalue())
+            return W_BoolObject.from_bool(self.value >= other.value)
         if isinstance(other, W_LongObject):
-            return W_BoolObject.from_bool(self.getvalue() >= other.getvalue().toint())
+            return W_BoolObject.from_bool(self.value >= other.value.toint())
         return W_BoolObject.W_True
 
 
 class W_LongObject(W_RootObject):
+    _immutable_fields_ = ["value"]
+    PREBUILT = []
+
     def __init__(self, value):
         self.value = value  # instance of rbigint
 
@@ -184,13 +224,18 @@ class W_LongObject(W_RootObject):
         return self.getrepr()
 
     @staticmethod
-    def fromint(intval):
-        return W_LongObject(intval)
+    def from_int(intval):
+        w_result = instantiate(W_LongObject)
+        w_result.value = rbigint.fromint(intval)
+        return w_result
 
     @staticmethod
     def from_rbigint(rbint):
-        return W_LongObject(rbint)
+        w_result = instantiate(W_LongObject)
+        w_result.value = rbint
+        return w_result
 
+    @jit.elidable
     def getvalue(self):
         return self.value
 
@@ -275,6 +320,8 @@ class W_LongObject(W_RootObject):
 
 
 class W_StrObject(W_RootObject):
+    _immutable_fields_ = ["value"]
+
     def __init__(self, value):
         self.value = value
 
@@ -390,6 +437,8 @@ class W_StrObject(W_RootObject):
 
 
 class W_ByteObject(W_RootObject):
+    _immutable_fields_ = ["value"]
+
     def __init__(self, value):
         self.value = value
 
@@ -445,11 +494,14 @@ class W_ByteObject(W_RootObject):
 
 
 class W_SequenceObject(W_RootObject):
+    _immutable_fields_ = ["value"]
+
     def __init__(self, value):
         self.value = value
 
 
 class W_TupleObject(W_SequenceObject):
+
     def __repr__(self):
         return self.getrepr()
 
@@ -470,6 +522,7 @@ class W_TupleObject(W_SequenceObject):
 
 
 class W_ListObject(W_SequenceObject):
+
     def getrepr(self):
         s = "["
         for item in self.value:
@@ -501,6 +554,8 @@ class W_ListObject(W_SequenceObject):
 
 
 class W_FunctionObject(W_RootObject):
+    _immutable_fields_ = ["body", "defaults[*]"]
+
     def __init__(self, body, defaults):
         self.body = body
         self.defaults = defaults
@@ -525,3 +580,9 @@ class W_FunctionObject(W_RootObject):
 
     def eq(self, other):
         raise WObjectOperationNotImplemented
+
+
+def setup_prebuilt():
+    for i in range(prebuilt_from, prebuilt_to):
+        W_IntObject.PREBUILT.append(W_IntObject.from_int(i))
+        W_IntObject.PREBUILT.append(W_LongObject.from_int(i))
