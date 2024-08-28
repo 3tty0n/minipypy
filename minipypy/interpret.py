@@ -162,7 +162,7 @@ class PyFrame(W_RootObject):
         self = hint(self, force_virtualizable=True, access_directly=True)
         assert isinstance(code, PyCode)
         self.code = code
-        self.locals_cells_stack_w = [None] * 8
+        self.locals_cells_stack_w = [None] * (code.co_stacksize + code.co_argcount)
         self.valuestackdepth = 0
         self.last_instr = -1
         self.w_locals = {}
@@ -188,6 +188,7 @@ class PyFrame(W_RootObject):
         self.valuestackdepth += 1
 
     def top(self):
+        assert self.valuestackdepth >= 0
         return self.locals_cells_stack_w[self.valuestackdepth]
 
     @jit.unroll_safe
