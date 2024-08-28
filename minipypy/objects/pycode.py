@@ -1,4 +1,4 @@
-from minipypy.objects.baseobject import W_ListObject, W_RootObject
+from minipypy.objects.baseobject import W_ListObject, W_RootObject, W_StrObject
 
 from rpython.rlib.objectmodel import compute_hash, r_dict
 
@@ -53,7 +53,9 @@ class PyCode(W_RootObject):
             isinstance(names, list) and
             isinstance(varnames, list) and
             isinstance(freevars, list) and
-            isinstance(cellvars, list)
+            isinstance(cellvars, list) and
+            isinstance(name, W_StrObject) and
+            isinstance(filename, W_StrObject)
         )
         self.co_argcount = argcount
         self.co_nlocals = nlocals
@@ -76,11 +78,10 @@ class PyCode(W_RootObject):
     def __repr__(self):
         return self.getrepr()
 
-    def getrepr(self):
-        return '<code object %s at %d, file "%s", line %d>' % (
-            self.co_name,
-            compute_hash(self),
-            self.co_filename,
+    def get_repr(self):
+        return "<code object %s, file '%s', line %d>" % (
+            self.co_name.value,
+            self.co_filename.value,
             self.co_firstlineno,
         )
 

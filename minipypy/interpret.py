@@ -599,7 +599,8 @@ class PyFrame(W_RootObject):
 
 def get_printable_location(next_instr, code):
     opcode = ord(code.co_code[next_instr])
-    return "%d @ %s" % (next_instr, opname[opcode])
+    name = opname[opcode]
+    return '%s #%d %s' % (code.get_repr(), next_instr, name)
 
 
 jitdriver = JitDriver(
