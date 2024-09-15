@@ -22,7 +22,7 @@ class PyCode(W_RootObject):
         "co_name",
         "co_firstlineno",
         "co_lnotab",
-        "globals_w?"
+        "w_globals?"
     ]
 
     def __init__(
@@ -72,7 +72,7 @@ class PyCode(W_RootObject):
         self.co_firstlineno = firstlineno
         self.co_lnotab = lnotab
 
-        self.w_globals = None
+        self.w_globals = {}
 
 
     def __repr__(self):
@@ -92,8 +92,3 @@ class PyCode(W_RootObject):
         if self.w_globals is w_globals:
             return False
         return True
-
-    def setitem(self, key, w_value):
-        if self.w_globals is None:
-            self.w_globals = {}
-        self.w_globals[key] = w_value
