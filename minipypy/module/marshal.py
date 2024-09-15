@@ -186,7 +186,10 @@ def unmarshal_lng(f):
 
 def unmarshal_strlist(f, tc):
     lng = atom_lng(f, tc)
-    return [unmarshal_str(f) for i in range(lng)]
+    lst = [None] * lng
+    for i in range(lng):
+        lst[i] = unmarshal_str(f)
+    return lst
 
 
 def unmarshal_pycode(f):
