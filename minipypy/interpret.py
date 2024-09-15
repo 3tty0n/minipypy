@@ -1,10 +1,11 @@
 import sys
 
 from rpython.rlib import jit
-from rpython.rlib.jit import JitDriver, hint
-from rpython.rlib.debug import ll_assert_not_none
-from rpython.rlib.objectmodel import always_inline
+from rpython.rlib.jit import JitDriver, hint, promote, promote_string
+from rpython.rlib.debug import ll_assert_not_none, make_sure_not_resized, check_nonneg
+from rpython.rlib.objectmodel import always_inline, compute_hash
 from rpython.rlib.rarithmetic import intmask, r_uint
+from rpython.rlib.rerased import new_erasing_pair
 
 from minipypy.frontend import rpy_load_py2
 from minipypy.objects.baseobject import *
@@ -190,27 +191,39 @@ class PyFrame(W_RootObject):
     _virtualizable_ = [
         "last_intr", "code",
         "valuestackdepth",
-        "locals_cells_stack_w[*]?",
+        "locals_cells_stack_w[*]",
         "w_locals"
     ]
 
+    _immutable_fields = ["code", "w_locals?"]
+
+    pycode = None # code object executed by that frame
+    locals_cells_stack_w = None # the list of all locals, cells and the valuestack
+    valuestackdepth = 0 # number of items on valuestack
+    lastblock = None
+    lastblock = None
+    w_locals = W_Dict()
 
     def __init__(self, code):
-        self = hint(self, force_virtualizable=True, access_directly=True)
+        self = hint(self, fresh_virtualizable=True, access_directly=True)
         assert isinstance(code, PyCode)
         self.code = code
-        self.locals_cells_stack_w = [None] * (code.co_stacksize + code.co_argcount)
-        self.valuestackdepth = 0
-        self.last_instr = -1
-        self.w_locals = {}
+        # the layout of this list is as follows:
+        # | local vars | cells | stack |
+        size = code.co_nlocals + len(code.co_cellvars) + len(code.co_freevars) + code.co_stacksize
+        self.locals_cells_stack_w = [None] * size
+        check_nonneg(self.valuestackdepth)
 
-        self.lastblock = None
+        self.last_instr = -1
 
     def getcode(self):
-        return hint(self.code, promote=True)
+        return promote(self.code)
 
     def getco_code(self):
-        return hint(self.getcode().co_code, promote_string=True)
+        return promote_string(self.getcode().co_code)
+
+    def get_w_globals(self):
+        return promote(self.code).w_globals
 
     def pop(self):
         valuestackdepth = self.valuestackdepth - 1
@@ -280,40 +293,38 @@ class PyFrame(W_RootObject):
     def STORE_NAME(self, oparg, next_instr):
         var = self.getcode().co_names[oparg]
         assert var is not None
-        # TODO: make this w_globals immutable
+
         w_value = self.pop()
-        self.getcode().setitem(var, w_value)
+        self.w_locals.setitem(var, w_value)
 
     def STORE_FAST(self, oparg, next_instr):
         assert oparg >= 0
         self.locals_cells_stack_w[oparg] = self.pop()
 
     def STORE_GLOBAL(self, oparg, next_instr):
-        co_names = hint(self.getcode().co_names, promote=True)
+        co_names = promote(self.getcode().co_names)
         name = co_names[oparg]
+        assert name is not None
+
         w_value = self.pop()
-        self.getcode().setitem(name, w_value)
+        self.getcode().w_globals[name] = w_value
 
     def LOAD_NAME(self, oparg, next_instr):
-        co_names = hint(self.getcode().co_names, promote=True)
-        assert oparg >= 0
+        co_names = promote(self.getcode().co_names)
         name = co_names[oparg]
+        assert name is not None
 
-        w_result = W_NoneObject.W_None
-        if name in self.w_locals:
-            w_result = self.w_locals[name]
-        else:
-            if name in self.getcode().w_globals:
-                w_result = self.getcode().w_globals[name]
+        w_result = self.w_locals.getitem(name)
+        if w_result is None:
+            w_globals = self.getcode().w_globals
+            w_result = w_globals.get(name)
 
-        if w_result.is_none():
+        if w_result is None:
             raise BytecodeCorruption("LOAD_NAME is failed")
         self.push(w_result)
 
-
     @always_inline
     def LOAD_FAST(self, oparg, next_instr):
-        assert oparg >= 0
         w_value = self.locals_cells_stack_w[oparg]
         if w_value is None:
             raise BytecodeCorruption("LOAD_FAST is failed")
@@ -324,23 +335,18 @@ class PyFrame(W_RootObject):
         self.push(const)
 
     def LOAD_GLOBAL(self, oparg, next_instr):
-        co_names = hint(self.getcode().co_names, promote=True)
+        co_names = promote(self.getcode().co_names)
         name = co_names[oparg]
+        assert name is not None
 
-        w_result = W_NoneObject.W_None
-        # search w_locals
-        if name in self.w_locals:
-            w_result = self.w_locals[name]
-        else:
-            # search w_globals
+        w_result = self.w_locals.getitem(name)
+        if w_result is None:
             w_globals = self.getcode().w_globals
-            if name in w_globals:
-                w_result = w_globals[name]
+            w_result = w_globals.get(name)
 
-        if w_result.is_none():
-            raise BytecodeCorruption("name %s cannot be found in w_locals and w_globals" % name)
+        if w_result is None:
+            raise BytecodeCorruption("LOAD_NAME is failed")
         self.push(w_result)
-
 
     def BINARY_POWER(self, oparg, next_instr):
         w_y = self.pop()
