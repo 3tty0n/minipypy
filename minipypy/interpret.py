@@ -150,6 +150,42 @@ class LoopBlock(FrameBlock):
             return r_uint(self.handlerposition)
 
 
+class W_Dict(W_RootObject):
+    # erase, unerase = new_erasing_pair("dict")
+    # erase = staticmethod(erase)
+    # unerase = staticmethod(unerase)
+
+    def __init__(self):
+        self.storage = [(None, None)] * 8
+        self.storage_ptr = 0
+        check_nonneg(self.storage_ptr)
+
+    @jit.unroll_safe
+    def getitem(self, w_key):
+        assert w_key is not None
+        for i in range(self.storage_ptr):
+            (x, y) = self.storage[i]
+            if x is w_key:
+                return y
+        return None
+
+    @jit.unroll_safe
+    def setitem(self, w_key, w_val):
+        for i in range(self.storage_ptr):
+            (x, y) = self.storage[i]
+            if x is w_key:
+                w_x = (x, w_val)
+                assert w_x is not None
+                self.storage[i] = w_x
+                return
+
+        w_x = (w_key, w_val)
+        assert w_x is not None
+        assert self.storage_ptr < len(self.storage)
+        self.storage[self.storage_ptr] = w_x
+        self.storage_ptr += 1
+
+
 class PyFrame(W_RootObject):
     _virtualizable_ = [
         "last_intr", "code",
@@ -157,6 +193,7 @@ class PyFrame(W_RootObject):
         "locals_cells_stack_w[*]?",
         "w_locals"
     ]
+
 
     def __init__(self, code):
         self = hint(self, force_virtualizable=True, access_directly=True)
