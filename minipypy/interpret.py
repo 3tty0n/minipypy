@@ -532,7 +532,7 @@ class PyFrame(W_RootObject):
         w_function = W_FunctionObject(code, arg_defaults)
         self.push(w_function)
 
-    @jit.unroll_safe
+    # @jit.unroll_safe
     def CALL_FUNCTION(self, oparg, next_instr):
         argc = oparg
         kwnum = argc >> 8
