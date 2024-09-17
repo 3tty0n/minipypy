@@ -122,23 +122,28 @@ class W_IntObject(W_RootObject):
         w_result.value = i
         return w_result
 
+    def positive(self):
+        return W_IntObject(+self.value)
+
+    def negative(self):
+        return W_IntObject(-self.value)
+
+    def not_(self):
+        if self.value == 0:
+            return W_BoolObject.W_True
+        return W_BoolObject.W_False
+
     def add(self, other):
         if isinstance(other, W_IntObject):
-            return self.add_int_int(other)
+            x = self.value
+            y = other.value
+            return W_IntObject(x + y)
         elif isinstance(other, W_LongObject):
-            return self.add_int_long(other)
+            x = self.value
+            y = other.value
+            return W_LongObject(rbigint.fromint(x).add(y))
         else:
             raise WObjectOperationException("Unexpected object: %s" % (other))
-
-    def add_int_int(self, other):
-        x = self.value
-        y = other.value
-        return W_IntObject(x + y)
-
-    def add_int_long(self, other):
-        x = self.value
-        y = other.value
-        return W_LongObject(rbigint.fromint(x).add(y))
 
     def sub(self, other):
         if isinstance(other, W_IntObject):
@@ -166,6 +171,39 @@ class W_IntObject(W_RootObject):
 
     def true_div(self, other):
         return self.div(other)
+
+    def mod(self, other):
+        x = self.value
+        if isinstance(other, W_IntObject):
+            y = other.value
+            return W_IntObject(x % y)
+        elif isinstance(other, W_LongObject):
+            y = other.value.toint()
+            return W_IntObject(x % y)
+        else:
+            raise WObjectOperationException("Unexpected object: %s" % (other))
+
+    def lshift(self, other):
+        x = self.value
+        if isinstance(other, W_IntObject):
+            y = other.value
+            return W_IntObject(x << y)
+        elif isinstance(other, W_LongObject):
+            y = other.value.toint()
+            return W_IntObject(x << y)
+        else:
+            raise WObjectOperationException("Unexpected object: %s" % (other))
+
+    def rshift(self, other):
+        x = self.value
+        if isinstance(other, W_IntObject):
+            y = other.value
+            return W_IntObject(x >> y)
+        elif isinstance(other, W_LongObject):
+            y = other.value.toint()
+            return W_IntObject(x >> y)
+        else:
+            raise WObjectOperationException("Unexpected object: %s" % (other))
 
     def eq(self, other):
         if isinstance(other, W_NoneObject):
@@ -250,6 +288,19 @@ class W_LongObject(W_RootObject):
             return False
         return True
 
+    def not_(self):
+        if self.value.toint() == 0:
+            return W_BoolObject.W_False
+        return W_BoolObject.W_True
+
+    @jit.elidable
+    def positive(self):
+        return W_LongObject(self.value.abs())
+
+    @jit.elidable
+    def negative(self):
+        return W_LongObject(self.value.neg())
+
     def add(self, other):
         if isinstance(other, W_IntObject):
             return W_LongObject(self.value.add(rbigint.fromint(other.getvalue())))
@@ -277,6 +328,31 @@ class W_LongObject(W_RootObject):
             return W_LongObject(self.value.div(rbigint.fromint(other.getvalue())))
         if isinstance(other, W_LongObject):
             return W_LongObject(self.value.div(other.getvalue()))
+        raise WObjectOperationException("Unexpected object: %s" % (other))
+
+    def mod(self, other):
+        if isinstance(other, W_IntObject):
+            return W_LongObject(self.value.mod(rbigint.fromint(other.value)))
+        if isinstance(other, W_LongObject):
+            return W_LongObject(self.value.mod(other.value))
+        raise WObjectOperationException("Unexpected object: %s" % (other))
+
+    def lshift(self, other):
+        if isinstance(other, W_IntObject):
+            y = other.value
+            return W_LongObject(self.value.lshift(y))
+        if isinstance(other, W_LongObject):
+            y = other.value.toint()
+            return W_LongObject(self.value.lshift(y))
+        raise WObjectOperationException("Unexpected object: %s" % (other))
+
+    def rshift(self, other):
+        if isinstance(other, W_IntObject):
+            y = other.value
+            return W_LongObject(self.value.rshift(y))
+        if isinstance(other, W_LongObject):
+            y = other.value.toint()
+            return W_LongObject(self.value.rshift(y))
         raise WObjectOperationException("Unexpected object: %s" % (other))
 
     def eq(self, other):
@@ -344,6 +420,11 @@ class W_StrObject(W_RootObject):
     def from_str(strval):
         assert isinstance(strval, str)
         return W_StrObject(strval)
+
+    def not_(self):
+        if self.value is "":
+            return W_BoolObject.W_True
+        return W_BoolObject.W_False
 
     def add(self, other):
         if (
@@ -457,10 +538,19 @@ class W_ByteObject(W_RootObject):
     def is_true(self):
         return False
 
+    def not_(self):
+        return W_BoolObject.W_False
+
     @staticmethod
     def from_str(strval):
         assert isinstance(strval, str)
         return W_ByteObject(strval)
+
+    def positive(self):
+        raise WObjectOperationException("Unsupported operand type for +")
+
+    def negative(self):
+        raise WObjectOperationException("Unsupported operand type for -")
 
     def add(self, other):
         raise WObjectOperationException("Unsupported operand type(s) for +")
@@ -493,14 +583,14 @@ class W_ByteObject(W_RootObject):
         raise WObjectOperationNotImplemented
 
 
-class W_SequenceObject(W_RootObject):
+class W_IteratorObject(W_RootObject):
     _immutable_fields_ = ["value"]
 
     def __init__(self, value):
         self.value = value
 
 
-class W_TupleObject(W_SequenceObject):
+class W_TupleObject(W_IteratorObject):
 
     def __repr__(self):
         return self.getrepr()
@@ -520,8 +610,13 @@ class W_TupleObject(W_SequenceObject):
     def from_list(lst):
         return W_TupleObject(lst)
 
+    def not_(self):
+        if len(self.value) == 0:
+            return W_BoolObject.W_True
+        return W_BoolObject.W_False
 
-class W_ListObject(W_SequenceObject):
+
+class W_ListObject(W_IteratorObject):
 
     def getrepr(self):
         s = "["
@@ -536,6 +631,17 @@ class W_ListObject(W_SequenceObject):
 
     def is_true(self):
         return len(self.value) != 0
+
+    def not_(self):
+        if len(self.value) == 0:
+            return W_BoolObject.W_True
+        return W_BoolObject.W_False
+
+    def positive(self):
+        raise WObjectOperationNotImplemented
+
+    def negative(self):
+        raise WObjectOperationNotImplemented
 
     def lt(self, other):
         raise WObjectOperationNotImplemented
@@ -565,6 +671,12 @@ class W_FunctionObject(W_RootObject):
 
     def is_true(self):
         return True
+
+    def positive(self):
+        raise WObjectOperationNotImplemented
+
+    def negative(self):
+        raise WObjectOperationNotImplemented
 
     def lt(self, other):
         raise WObjectOperationNotImplemented

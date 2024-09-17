@@ -1,16 +1,43 @@
 import sys
 
 from rpython.rlib import jit
-from rpython.rlib.jit import JitDriver, hint, promote, promote_string
+from rpython.rlib.jit import JitDriver, hint, promote, promote_string, not_rpython
 from rpython.rlib.debug import ll_assert_not_none, make_sure_not_resized, check_nonneg
 from rpython.rlib.objectmodel import always_inline, compute_hash
 from rpython.rlib.rarithmetic import intmask, r_uint
 from rpython.rlib.rerased import new_erasing_pair
+from rpython.tool.sourcetools import func_with_new_name
 
 from minipypy.frontend import rpy_load_py2
 from minipypy.objects.baseobject import *
+from minipypy.objects.dictobject import W_Dict
 from minipypy.objects.pycode import PyCode
 from minipypy.opcode27 import Bytecodes, opmap, opname, HAVE_ARGUMENT
+
+
+# Copied from pypy/interpreter/pyopcode.py
+# @not_rpython
+# def unaryoperation(operationname):
+#     def opimpl(self, *ignored):
+#         operation = getattr(self.space, operationname)
+#         w_1 = self.popvalue()
+#         w_result = operation(w_1)
+#         self.pushvalue(w_result)
+#     opimpl.unaryop = operationname
+
+#     return func_with_new_name(opimpl, "opcode_impl_for_%s" % operationname)
+
+# @not_rpython
+# def binaryoperation(operationname):
+#     def opimpl(self, *ignored):
+#         operation = getattr(self.space, operationname)
+#         w_2 = self.popvalue()
+#         w_1 = self.popvalue()
+#         w_result = operation(w_1, w_2)
+#         self.pushvalue(w_result)
+#     opimpl.binop = operationname
+
+#     return func_with_new_name(opimpl, "opcode_impl_for_%s" % operationname)
 
 
 class OpcodeNotImplementedError(RuntimeError):
@@ -268,6 +295,23 @@ class PyFrame(W_RootObject):
     def UNARY_POSITIVE(self, oparg, next_instr):
         w_x = self.pop()
         w_x = w_x.positive()
+        self.push(w_x)
+
+    def UNARY_NEGATIVE(self, oparg, next_instr):
+        w_x = self.pop()
+        w_x = w_x.negative()
+        self.push(w_x)
+
+    def UNARY_NOT(self, oparg, next_instr):
+        w_x = self.pop()
+        w_x = w_x.not_()
+        self.push(w_x)
+
+    def UNARY_CONVERT(self, oparg, next_instr):
+        raise OpcodeNotImplementedError()
+
+    def UNARY_INVERT(self, oparg, next_instr):
+        raise OpcodeNotImplementedError()
 
     def STORE_NAME(self, oparg, next_instr):
         var = self.getcode().co_names[oparg]
@@ -295,8 +339,7 @@ class PyFrame(W_RootObject):
 
         w_result = self.w_locals[name]
         if w_result is None:
-            w_globals = self.getcode().w_globals
-            w_result = w_globals[name]
+            w_result = self._load_global(name)
 
         if w_result is None:
             raise BytecodeCorruption("LOAD_NAME is failed")
@@ -318,14 +361,16 @@ class PyFrame(W_RootObject):
         name = co_names[oparg]
         assert name is not None
 
-        w_result = self.w_locals[name]
-        if w_result is None:
-            w_globals = self.getcode().w_globals
-            w_result = w_globals.get(name)
+        w_result = self._load_global(name)
+        self.push(w_result)
+
+    def _load_global(self, key):
+        w_globals = self.getcode().w_globals
+        w_result = w_globals.get(key)
 
         if w_result is None:
             raise BytecodeCorruption("LOAD_NAME is failed")
-        self.push(w_result)
+        return w_result
 
     def BINARY_POWER(self, oparg, next_instr):
         w_y = self.pop()
@@ -349,6 +394,18 @@ class PyFrame(W_RootObject):
         w_y = self.pop()
         w_x = self.pop()
         w_z = w_x.mod(w_y)
+        self.push(w_z)
+
+    def BINARY_LSHIFT(self, oparg, next_instr):
+        w_y = self.pop()
+        w_x = self.pop()
+        w_z = w_x.lshift(w_y)
+        self.push(w_z)
+
+    def BINARY_RSHIFT(self, oparg, next_instr):
+        w_y = self.pop()
+        w_x = self.pop()
+        w_z = w_x.rshift(w_y)
         self.push(w_z)
 
     def BINARY_ADD(self, oparg, next_instr):
@@ -435,6 +492,24 @@ class PyFrame(W_RootObject):
         w_result = w_tos1.div(w_tos)
         self.push(w_result)
 
+    def INPLACE_MODULO(self, oparg, next_instr):
+        w_tos = self.pop()
+        w_tos1 = self.pop()
+        w_result = w_tos1.mod(w_tos)
+        self.push(w_result)
+
+    def INPLACE_LSHIFT(self, oparg, next_instr):
+        w_tos = self.pop()
+        w_tos1 = self.pop()
+        w_result = w_tos1.lshift(w_tos)
+        self.push(w_result)
+
+    def INPLACE_RSHIFT(self, oparg, next_instr):
+        w_tos = self.pop()
+        w_tos1 = self.pop()
+        w_result = w_tos1.rshift(w_tos)
+        self.push(w_result)
+
     def RETURN_VALUE(self, oparg, next_instr):
         return self.pop()
 
@@ -474,7 +549,7 @@ class PyFrame(W_RootObject):
 
     def UNPACK_SEQUENCE(self, oparg, next_instr):
         tos = self.pop()
-        assert isinstance(tos, W_SequenceObject)
+        assert isinstance(tos, W_IteratorObject)
         seq = tos.value
         for i in range(oparg):
             self.push(seq[len(seq) - (i + 1)])
@@ -539,6 +614,16 @@ class PyFrame(W_RootObject):
                 self.BINARY_MULTIPLY(oparg, next_instr)
             elif opcode == Bytecodes.BINARY_TRUE_DIVIDE:
                 self.BINARY_TRUE_DIVIDE(oparg, next_instr)
+            elif opcode == Bytecodes.UNARY_POSITIVE:
+                self.UNARY_POSITIVE(opcode, next_instr)
+            elif opcode == Bytecodes.UNARY_NEGATIVE:
+                self.UNARY_NEGATIVE(opcode, next_instr)
+            elif opcode == Bytecodes.UNARY_NOT:
+                self.UNARY_NOT(opcode, next_instr)
+            elif opcode == Bytecodes.UNARY_CONVERT:
+                self.UNARY_CONVERT(opcode, next_instr)
+            elif opcode == Bytecodes.UNARY_INVERT:
+                self.UNARY_INVERT(opcode, next_instr)
             elif opcode == Bytecodes.BUILD_TUPLE:
                 self.BUILD_TUPLE(oparg, next_instr)
             elif opcode == Bytecodes.COMPARE_OP:
@@ -549,6 +634,12 @@ class PyFrame(W_RootObject):
                 self.INPLACE_SUBTRACT(oparg, next_instr)
             elif opcode == Bytecodes.INPLACE_DIVIDE:
                 self.INPLACE_DIVIDE(oparg, next_instr)
+            elif opcode == Bytecodes.INPLACE_LSHIFT:
+                self.INPLACE_LSHIFT(oparg, next_instr)
+            elif opcode == Bytecodes.INPLACE_RSHIFT:
+                self.INPLACE_RSHIFT(oparg, next_instr)
+            elif opcode == Bytecodes.INPLACE_MODULO:
+                self.INPLACE_MODULO(oparg, next_instr)
             elif opcode == Bytecodes.LOAD_NAME:
                 self.LOAD_NAME(oparg, next_instr)
             elif opcode == Bytecodes.LOAD_FAST:
