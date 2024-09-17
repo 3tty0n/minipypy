@@ -151,40 +151,49 @@ class LoopBlock(FrameBlock):
             return r_uint(self.handlerposition)
 
 
+class Map(object):
+    def __init__(self):
+        self.indexes = {}
+        self.other_maps = {}
+
+    @jit.elidable
+    def getindex(self, name):
+        return self.indexes.get(name, -1)
+
+    @jit.elidable
+    def new_map_with_additional_name(self, name):
+        if name not in self.other_maps:
+            newmap = Map()
+            newmap.indexes.update(self.indexes)
+            newmap.indexes[name] = len(self.indexes)
+            self.other_maps[name] = newmap
+        return self.other_maps[name]
+
+
+EMPTY_MAP = Map()
+
+
 class W_Dict(W_RootObject):
-    # erase, unerase = new_erasing_pair("dict")
-    # erase = staticmethod(erase)
-    # unerase = staticmethod(unerase)
 
     def __init__(self):
-        self.storage = [(None, None)] * 8
-        self.storage_ptr = 0
-        check_nonneg(self.storage_ptr)
+        self.map = EMPTY_MAP
+        self.storage = []
 
-    @jit.unroll_safe
-    def getitem(self, w_key):
-        assert w_key is not None
-        for i in range(self.storage_ptr):
-            (x, y) = self.storage[i]
-            if x is w_key:
-                return y
+    def __getitem__(self, w_key):
+        map = promote(self.map)
+        index = map.getindex(w_key)
+        if index != -1:
+            return self.storage[index]
         return None
 
-    @jit.unroll_safe
-    def setitem(self, w_key, w_val):
-        for i in range(self.storage_ptr):
-            (x, y) = self.storage[i]
-            if x is w_key:
-                w_x = (x, w_val)
-                assert w_x is not None
-                self.storage[i] = w_x
-                return
-
-        w_x = (w_key, w_val)
-        assert w_x is not None
-        assert self.storage_ptr < len(self.storage)
-        self.storage[self.storage_ptr] = w_x
-        self.storage_ptr += 1
+    def __setitem__(self, w_key, w_val):
+        map = promote(self.map)
+        index = map.getindex(w_key)
+        if index != -1:
+            self.storage[index] = w_val
+            return
+        self.map = map.new_map_with_additional_name(w_key)
+        self.storage.append(w_val)
 
 
 class PyFrame(W_RootObject):
@@ -290,12 +299,27 @@ class PyFrame(W_RootObject):
         self.push(tos2)
         self.push(tos3)
 
+    def ROT_FOUR(self, oparg, next_instr):
+        assert self.valuestackdepth - 3 >= 0
+        tos = self.pop()
+        tos2 = self.pop()
+        tos3 = self.pop()
+        tos4 = self.pop()
+        self.push(tos)
+        self.push(tos2)
+        self.push(tos3)
+        self.push(tos4)
+
+    def UNARY_POSITIVE(self, oparg, next_instr):
+        w_x = self.pop()
+        w_x = w_x.positive()
+
     def STORE_NAME(self, oparg, next_instr):
         var = self.getcode().co_names[oparg]
         assert var is not None
 
         w_value = self.pop()
-        self.w_locals.setitem(var, w_value)
+        self.w_locals[var] = w_value
 
     def STORE_FAST(self, oparg, next_instr):
         assert oparg >= 0
@@ -314,10 +338,10 @@ class PyFrame(W_RootObject):
         name = co_names[oparg]
         assert name is not None
 
-        w_result = self.w_locals.getitem(name)
+        w_result = self.w_locals[name]
         if w_result is None:
             w_globals = self.getcode().w_globals
-            w_result = w_globals.get(name)
+            w_result = w_globals[name]
 
         if w_result is None:
             raise BytecodeCorruption("LOAD_NAME is failed")
@@ -339,7 +363,7 @@ class PyFrame(W_RootObject):
         name = co_names[oparg]
         assert name is not None
 
-        w_result = self.w_locals.getitem(name)
+        w_result = self.w_locals[name]
         if w_result is None:
             w_globals = self.getcode().w_globals
             w_result = w_globals.get(name)
