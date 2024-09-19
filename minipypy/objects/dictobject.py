@@ -30,6 +30,17 @@ class W_Dict(W_RootObject):
         self.map = EMPTY_MAP
         self.storage = []
 
+    def __repr__(self):
+        return self.get_repr()
+
+    def get_repr(self):
+        s = "{"
+        for i in range(len(self.storage)):
+            s += str(self.storage[i])
+            s += ", "
+        s += "}"
+        return s
+
     def __getitem__(self, w_key):
         map = promote(self.map)
         index = map.getindex(w_key)
