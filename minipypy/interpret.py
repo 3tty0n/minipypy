@@ -10,6 +10,7 @@ from rpython.tool.sourcetools import func_with_new_name
 
 from minipypy.frontend import rpy_load_py2
 from minipypy.objects.baseobject import *
+from minipypy.objects.function import W_FunctionObject
 from minipypy.objects.dictobject import W_Dict
 from minipypy.objects.pycode import PyCode
 from minipypy.opcode27 import Bytecodes, opmap, opname, HAVE_ARGUMENT
@@ -251,15 +252,6 @@ class PyFrame(W_RootObject):
         self.lastblock = block.previous
         return block
 
-    def create_pyframe(self, code, args):
-        pyframe = PyFrame(code)
-        for i in range(len(args)):
-            assert i >= 0
-            pyframe.locals_cells_stack_w[i] = args[i]
-            pyframe.valuestackdepth += 1
-        pyframe.code.frame_stores_global(self.getcode().w_globals)
-        return pyframe
-
     def read_const(self, operand):
         return self.getcode().co_consts[operand]
 
@@ -314,11 +306,11 @@ class PyFrame(W_RootObject):
         raise OpcodeNotImplementedError()
 
     def STORE_NAME(self, oparg, next_instr):
-        var = self.getcode().co_names[oparg]
-        assert var is not None
+        name = self.getcode().co_names[oparg]
+        assert name is not None
 
         w_value = self.pop()
-        self.w_locals[var] = w_value
+        self.w_locals[name] = w_value
 
     def STORE_FAST(self, oparg, next_instr):
         assert oparg >= 0
@@ -342,7 +334,7 @@ class PyFrame(W_RootObject):
             w_result = self._load_global(name)
 
         if w_result is None:
-            raise BytecodeCorruption("LOAD_NAME is failed")
+            raise BytecodeCorruption("LOAD_NAME is failed: " + str(name))
         self.push(w_result)
 
     @always_inline
@@ -366,10 +358,10 @@ class PyFrame(W_RootObject):
 
     def _load_global(self, key):
         w_globals = self.getcode().w_globals
-        w_result = w_globals.get(key)
+        w_result = w_globals[key]
 
         if w_result is None:
-            raise BytecodeCorruption("LOAD_NAME is failed")
+            raise BytecodeCorruption("_load_global is failed: %s in %s" % (key, w_globals.get_repr()))
         return w_result
 
     def BINARY_POWER(self, oparg, next_instr):
@@ -521,15 +513,26 @@ class PyFrame(W_RootObject):
         block = self.pop_block()
         block.cleanup(self)  # the block knows how to clean up the value stack
 
+    def create_pyframe(self, code, args):
+        code.w_globals = self.getcode().w_globals
+        pyframe = PyFrame(code)
+        for i in range(len(args)):
+            assert i >= 0
+            pyframe.locals_cells_stack_w[i] = args[i]
+            pyframe.valuestackdepth += 1
+        return pyframe
+
     def MAKE_FUNCTION(self, oparg, next_instr):
         argc = oparg
         code = self.pop()
-        arg_defaults = [None] * argc
+        assert isinstance(code, PyCode)
+        defs_w = [None] * argc
         i = 0
         while i < argc:
-            arg_defaults[i] = self.pop()
+            defs_w[i] = self.pop()
             i += 1
-        w_function = W_FunctionObject(code, arg_defaults)
+        w_function = W_FunctionObject(code, self.getcode().w_globals, defs_w)
+        self.getcode().w_globals[code.co_name] = w_function
         self.push(w_function)
 
     # @jit.unroll_safe
@@ -542,7 +545,7 @@ class PyFrame(W_RootObject):
             args[i] = self.pop()
         w_function = self.pop()
         assert isinstance(w_function, W_FunctionObject)
-        pyframe = self.create_pyframe(w_function.body, args)
+        pyframe = self.create_pyframe(w_function.getcode(), args)
         w_value = pyframe.interpret()
         if w_value:
             self.push(w_value)
