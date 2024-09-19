@@ -1,6 +1,7 @@
 from minipypy.objects.baseobject import W_ListObject, W_RootObject, W_StrObject
+from minipypy.objects.dictobject import W_Dict
 
-from rpython.rlib.objectmodel import compute_hash, r_dict
+from rpython.rlib.objectmodel import compute_hash
 
 def globals_w_key_eq(key, other):
     return compute_hash(key) == compute_hash(other)
@@ -72,11 +73,11 @@ class PyCode(W_RootObject):
         self.co_firstlineno = firstlineno
         self.co_lnotab = lnotab
 
-        self.w_globals = {}
+        self.w_globals = W_Dict()
 
 
     def __repr__(self):
-        return self.getrepr()
+        return self.get_repr()
 
     def get_repr(self):
         return "<code object %s, file '%s', line %d>" % (
