@@ -1,5 +1,3 @@
-import operator
-
 from rpython.rlib import jit
 from rpython.rlib.rbigint import rbigint
 from rpython.rlib.objectmodel import instantiate
@@ -20,14 +18,6 @@ WObjectOperationNotImplemented = WObjectOperationException("Not implemented")
 
 
 class W_RootObject(object):
-    # TODO: workaround
-    # _immutable_fields_ = ["co_code", "co_consts[*]", "co_names[*]",]
-
-    def __repr__(self):
-        return "W_RootObject()"
-
-    def getrepr(self):
-        return "W_RootObject()"
 
     def is_none(self):
         return False
@@ -636,41 +626,6 @@ class W_ListObject(W_IteratorObject):
         if len(self.value) == 0:
             return W_BoolObject.W_True
         return W_BoolObject.W_False
-
-    def positive(self):
-        raise WObjectOperationNotImplemented
-
-    def negative(self):
-        raise WObjectOperationNotImplemented
-
-    def lt(self, other):
-        raise WObjectOperationNotImplemented
-
-    def le(self, other):
-        raise WObjectOperationNotImplemented
-
-    def gt(self, other):
-        raise WObjectOperationNotImplemented
-
-    def ge(self, other):
-        raise WObjectOperationNotImplemented
-
-    def eq(self, other):
-        raise WObjectOperationNotImplemented
-
-
-class W_FunctionObject(W_RootObject):
-    _immutable_fields_ = ["body", "defaults[*]"]
-
-    def __init__(self, body, defaults):
-        self.body = body
-        self.defaults = defaults
-
-    def __repr__(self):
-        return "Function(%s, %s)" % (self.body, self.defaults)
-
-    def is_true(self):
-        return True
 
     def positive(self):
         raise WObjectOperationNotImplemented
