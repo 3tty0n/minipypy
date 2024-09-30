@@ -513,15 +513,6 @@ class PyFrame(W_RootObject):
         block = self.pop_block()
         block.cleanup(self)  # the block knows how to clean up the value stack
 
-    def create_pyframe(self, code, args):
-        code.w_globals = self.getcode().w_globals
-        pyframe = PyFrame(code)
-        for i in range(len(args)):
-            assert i >= 0
-            pyframe.locals_cells_stack_w[i] = args[i]
-            pyframe.valuestackdepth += 1
-        return pyframe
-
     def MAKE_FUNCTION(self, oparg, next_instr):
         argc = oparg
         code = self.pop()
@@ -535,7 +526,7 @@ class PyFrame(W_RootObject):
         self.getcode().w_globals[code.co_name] = w_function
         self.push(w_function)
 
-    # @jit.unroll_safe
+    @jit.unroll_safe
     def CALL_FUNCTION(self, oparg, next_instr):
         argc = oparg
         kwnum = argc >> 8
@@ -545,7 +536,12 @@ class PyFrame(W_RootObject):
             args[i] = self.pop()
         w_function = self.pop()
         assert isinstance(w_function, W_FunctionObject)
-        pyframe = self.create_pyframe(w_function.getcode(), args)
+        code = w_function.getcode()
+        pyframe = PyFrame(code)
+        for i in range(len(args)):
+            assert i >= 0
+            pyframe.locals_cells_stack_w[i] = args[i]
+            pyframe.valuestackdepth += 1
         w_value = pyframe.interpret()
         if w_value:
             self.push(w_value)
