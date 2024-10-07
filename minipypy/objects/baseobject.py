@@ -263,6 +263,9 @@ class W_LongObject(W_RootObject):
         w_result.value = rbint
         return w_result
 
+    def toint(self):
+        return self.value.toint()
+
     @jit.elidable
     def getvalue(self):
         return self.value
@@ -556,82 +559,6 @@ class W_ByteObject(W_RootObject):
 
     def true_div(self, other):
         raise WObjectOperationException("Unsupported operaiton /")
-
-    def lt(self, other):
-        raise WObjectOperationNotImplemented
-
-    def le(self, other):
-        raise WObjectOperationNotImplemented
-
-    def gt(self, other):
-        raise WObjectOperationNotImplemented
-
-    def ge(self, other):
-        raise WObjectOperationNotImplemented
-
-    def eq(self, other):
-        raise WObjectOperationNotImplemented
-
-
-class W_IteratorObject(W_RootObject):
-    _immutable_fields_ = ["value"]
-
-    def __init__(self, value):
-        self.value = value
-
-
-class W_TupleObject(W_IteratorObject):
-
-    def __repr__(self):
-        return self.getrepr()
-
-    def getrepr(self):
-        s = "("
-        for item in self.value:
-            s += item.getrepr()
-            s += ", "
-        s += ")"
-        return s
-
-    def is_true(self):
-        return len(self.value) != 0
-
-    @staticmethod
-    def from_list(lst):
-        return W_TupleObject(lst)
-
-    def not_(self):
-        if len(self.value) == 0:
-            return W_BoolObject.W_True
-        return W_BoolObject.W_False
-
-
-class W_ListObject(W_IteratorObject):
-
-    def getrepr(self):
-        s = "["
-        for item in self.value:
-            s += item.getrepr()
-            s += ", "
-        s += "]"
-        return s
-
-    def __repr__(self):
-        return self.getrepr()
-
-    def is_true(self):
-        return len(self.value) != 0
-
-    def not_(self):
-        if len(self.value) == 0:
-            return W_BoolObject.W_True
-        return W_BoolObject.W_False
-
-    def positive(self):
-        raise WObjectOperationNotImplemented
-
-    def negative(self):
-        raise WObjectOperationNotImplemented
 
     def lt(self, other):
         raise WObjectOperationNotImplemented
