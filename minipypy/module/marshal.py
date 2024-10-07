@@ -2,6 +2,8 @@ from rpython.rlib.rarithmetic import intmask
 
 from minipypy.objects.pycode import PyCode
 from minipypy.objects.baseobject import *
+from minipypy.objects.tupleobject import W_TupleObject
+from minipypy.objects.listobject import W_ListObject
 
 TYPE_NULL = "0"
 TYPE_NONE = "N"
