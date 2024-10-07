@@ -21,17 +21,6 @@ class W_ListObject(W_IteratorObject):
         self.wrappeditems = wrappeditems
         self.register_builtins()
 
-    def register_builtins(self):
-        self.set_method("getitem", W_BuiltinFunction(self.getitem))
-        self.set_method("getitem_copy", W_BuiltinFunction(self.getitem_copy))
-        self.set_method("setitem", W_BuiltinFunction(self.setitem))
-        self.set_method("append", W_BuiltinFunction(self.append))
-        self.set_method("inplace_mul", W_BuiltinFunction(self.inplace_mul))
-        self.set_method("mul", W_BuiltinFunction(self.mul))
-        self.set_method("pop", W_BuiltinFunction(self.pop))
-        self.set_method("reverse", W_BuiltinFunction(self.reverse))
-        self.set_method("sort", W_BuiltinFunction(self.sort))
-
     def getrepr(self):
         s = "["
         for item in self.wrappeditems:
@@ -51,54 +40,65 @@ class W_ListObject(W_IteratorObject):
             return W_BoolObject.W_True
         return W_BoolObject.W_False
 
-    def getitem(self, index):
-        return self.wrappeditems[index]
+    def register_builtins(self):
+        self.set_method("getitem", W_BuiltinFunction(_getitem))
+        self.set_method("getitem_copy", W_BuiltinFunction(_getitem_copy))
+        self.set_method("setitem", W_BuiltinFunction(_setitem))
+        self.set_method("append", W_BuiltinFunction(_append))
+        self.set_method("inplace_mul", W_BuiltinFunction(_inplace_mul))
+        self.set_method("mul", W_BuiltinFunction(_mul))
+        self.set_method("pop", W_BuiltinFunction(_pop))
+        self.set_method("reverse", W_BuiltinFunction(_reverse))
+        self.set_method("sort", W_BuiltinFunction(_sort))
 
-    def getitem_copy(self):
-        res = [None] * len(self.wrappeditems)
-        prevvalue = self.wrappeditems[0]
-        w_item = prevvalue
-        res[0] = w_item
-        for index in range(1, len(self.wrappeditems)):
-            item = self.wrappeditems[index]
-            if jit.we_are_jitted():
-                prevvalue = item
-            res[index] = w_item
-        return res
+def _getitem(w_list, index):
+    return w_list.wrappeditems[index]
 
-    def setitem(self, index, w_item):
-        self.wrappeditems[index] = w_item
+def _getitem_copy(w_list):
+    res = [None] * len(w_list.wrappeditems)
+    prevvalue = w_list.wrappeditems[0]
+    w_item = prevvalue
+    res[0] = w_item
+    for index in range(1, len(w_list.wrappeditems)):
+        item = w_list.wrappeditems[index]
+        if jit.we_are_jitted():
+            prevvalue = item
+        res[index] = w_item
+    return res
 
-    def append(self, w_item):
-        self.wrappeditems.append(w_item)
-        return self.wrappeditems
+def _setitem(w_list, index, w_item):
+    w_list.wrappeditems[index] = w_item
 
-    def inplace_mul(self, times):
-        self.wrappeditems *= times
+def _append(w_list, w_item):
+    w_list.wrappeditems.append(w_item)
+    return w_list.wrappeditems
 
-    @jit.unroll_safe
-    def mul(self, times):
-        num = times.toint()
-        assert not isinstance(num, rbigint)
-        w_result = [None] * len(self.wrappeditems) * num
-        for i in range(num):
-            for j in range(len(self.wrappeditems)):
-                w_result[len(self.wrappeditems) * i + j] = self.wrappeditems[j]
-        return W_ListObject(w_result)
+def _inplace_mul(w_list, times):
+    w_list.wrappeditems *= times
 
-    def pop(self, index):
-        if index < 0:
-            raise IndexError
+@jit.unroll_safe
+def _mul(w_list, times):
+    num = times.toint()
+    assert not isinstance(num, rbigint)
+    w_result = [None] * len(w_list.wrappeditems) * num
+    for i in range(num):
+        for j in range(len(w_list.wrappeditems)):
+            w_result[len(w_list.wrappeditems) * i + j] = w_list.wrappeditems[j]
+    return W_ListObject(w_result)
 
-        try:
-            item = self.wrappeditems.pop(index)
-        except IndexError:
-            raise
+def _pop(w_list, index):
+    if index < 0:
+        raise IndexError
 
-        return item
+    try:
+        item = w_list.wrappeditems.pop(index)
+    except IndexError:
+        raise
 
-    def reverse(self):
-        return self.wrappeditems.reverse()
+    return item
 
-    def sort(self):
-        return self.wrappeditems.sort()
+def _reverse(w_list):
+    return w_list.wrappeditems.reverse()
+
+def _sort(w_list):
+    return w_list.wrappeditems.sort()

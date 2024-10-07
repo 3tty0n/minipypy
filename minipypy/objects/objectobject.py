@@ -31,6 +31,9 @@ class W_Instance(W_RootObject):
         self.map = EMPTY_MAP
         self.storage = []
 
+    def __repr__(self):
+        return self.getrepr()
+
     def getrepr(self):
         return self.cls.getrepr()
 
