@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env pypy
 import argparse
 import dis
 import marshal
