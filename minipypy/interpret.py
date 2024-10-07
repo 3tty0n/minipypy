@@ -642,12 +642,14 @@ class PyFrame(W_RootObject):
             self.pushvalue(w_value)
 
     def _call_function_instance(self, w_function, args):
+        if len(args) == 0:
+            w_result = w_function.method()
+            self.pushvalue(w_result)
+            return
         args_t = (args[0])
         for i in range(1, len(args)):
             args_t = args_t + (args[i],)
-
-        method = w_function.method
-        w_result = method(*args_t)
+        w_result = w_function.method(*args_t)
         self.pushvalue(w_result)
 
     def UNPACK_SEQUENCE(self, oparg, next_instr):
