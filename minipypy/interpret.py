@@ -559,6 +559,36 @@ class PyFrame(W_RootObject):
         w_result = w_tos1.rshift(w_tos)
         self.pushvalue(w_result)
 
+    def slice(self, w_start, w_end):
+        w_obj = self.popvalue()
+        w_result = W_SliceObject(w_obj, w_start, w_end)
+        self.pushvalue(w_result)
+
+    def SLICE_0(self, oparg, next_instr):
+        self.slice(W_NoneObject.W_None, W_NoneObject.W_None)
+
+    def SLICE_1(self, oparg, next_instr):
+        w_start = self.popvalue()
+        self.slice(w_start, W_NoneObject.W_None)
+
+    def SLICE_2(self, oparg, next_instr):
+        w_end = self.popvalue()
+        self.slice(W_NoneObject.W_None, w_end)
+
+    def SLICE_3(self, oparg, next_instr):
+        w_end = self.popvalue()
+        w_start = self.popvalue()
+        self.slice(w_start, w_end)
+
+    def storeslice(self, w_start, w_end):
+        w_obj = self.popvalue()
+        w_newvalue = self.popvalue()
+        # self.space.setslice(w_obj, w_start, w_end, w_newvalue)
+
+    def BUILD_LIST(self, itemcount, next_instr):
+        items = self.popvalues_mutable(itemcount)
+        w_list = W_ListObject(items).instantiate()
+        self.pushvalue(w_list)
 
     def RETURN_VALUE(self, oparg, next_instr):
         return self.popvalue()
@@ -591,9 +621,16 @@ class PyFrame(W_RootObject):
         argnum = argc & 0xFF
         args = [None] * argnum
         for i in range(argnum):
-            args[i] = self.pop()
-        w_function = self.pop()
-        assert isinstance(w_function, W_FunctionObject)
+            args[i] = self.popvalue()
+        w_function = self.popvalue()
+        if isinstance(w_function, W_FunctionObject):
+            self._call_function(w_function, args)
+        elif isinstance(w_function, W_BuiltinFunction):
+            self._call_function_instance(w_function, args)
+        else:
+            raise BytecodeCorruption("w_function is not W_FunctionObject but %s" % (str(w_function)))
+
+    def _call_function(self, w_function, args):
         code = w_function.getcode()
         pyframe = PyFrame(code)
         for i in range(len(args)):
@@ -603,6 +640,10 @@ class PyFrame(W_RootObject):
         w_value = pyframe.interpret()
         if w_value:
             self.pushvalue(w_value)
+
+    def _call_function_instance(self, w_function, args):
+        w_result = w_function.method(*args)
+        self.pushvalue(w_result)
 
     def UNPACK_SEQUENCE(self, oparg, next_instr):
         tos = self.popvalue()
@@ -697,6 +738,28 @@ class PyFrame(W_RootObject):
                 self.INPLACE_RSHIFT(oparg, next_instr)
             elif opcode == Bytecodes.INPLACE_MODULO:
                 self.INPLACE_MODULO(oparg, next_instr)
+            elif opcode == Bytecodes.BUILD_LIST:
+                self.BUILD_LIST(oparg, next_instr)
+            elif opcode == Bytecodes.SLICE_0:
+                self.SLICE_0(oparg, next_instr)
+            elif opcode == Bytecodes.SLICE_1:
+                self.SLICE_1(oparg, next_instr)
+            elif opcode == Bytecodes.SLICE_2:
+                self.SLICE_2(oparg, next_instr)
+            elif opcode == Bytecodes.SLICE_3:
+                self.SLICE_3(oparg, next_instr)
+            elif opcode == Bytecodes.STORE_SLICE_0:
+                # TODO: implement it
+                pass
+            elif opcode == Bytecodes.STORE_SLICE_1:
+                # TODO: implement it
+                pass
+            elif opcode == Bytecodes.STORE_SLICE_2:
+                # TODO: implement it
+                pass
+            elif opcode == Bytecodes.STORE_SLICE_3:
+                # TODO: implement it
+                pass
             elif opcode == Bytecodes.LOAD_NAME:
                 self.LOAD_NAME(oparg, next_instr)
             elif opcode == Bytecodes.LOAD_FAST:
@@ -705,6 +768,8 @@ class PyFrame(W_RootObject):
                 self.LOAD_CONST(oparg, next_instr)
             elif opcode == Bytecodes.LOAD_GLOBAL:
                 self.LOAD_GLOBAL(oparg, next_instr)
+            elif opcode == Bytecodes.LOAD_ATTR:
+                self.LOAD_ATTR(oparg, next_instr)
             elif opcode == Bytecodes.PRINT_ITEM:
                 self.PRINT_ITME(oparg, next_instr)
             elif opcode == Bytecodes.PRINT_NEWLINE:
