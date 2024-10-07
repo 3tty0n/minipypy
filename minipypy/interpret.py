@@ -10,8 +10,12 @@ from rpython.tool.sourcetools import func_with_new_name
 
 from minipypy.frontend import rpy_load_py2
 from minipypy.objects.baseobject import *
-from minipypy.objects.function import W_FunctionObject
+from minipypy.objects.function import W_BuiltinFunction, W_FunctionObject
 from minipypy.objects.dictobject import W_Dict
+from minipypy.objects.iteratorobject import W_IteratorObject
+from minipypy.objects.sliceobject import W_SliceObject
+from minipypy.objects.tupleobject import W_TupleObject
+from minipypy.objects.listobject import W_ListObject
 from minipypy.objects.pycode import PyCode
 from minipypy.opcode27 import Bytecodes, opmap, opname, HAVE_ARGUMENT
 
@@ -214,10 +218,13 @@ class PyFrame(W_RootObject):
     def getco_code(self):
         return promote_string(self.getcode().co_code)
 
+    def getname_w(self, index):
+        return self.getcode().co_names[index]
+
     def get_w_globals(self):
         return promote(self.code).w_globals
 
-    def pop(self):
+    def popvalue(self):
         valuestackdepth = self.valuestackdepth - 1
         assert valuestackdepth >= 0
         w_x = self.locals_cells_stack_w[valuestackdepth]
@@ -225,13 +232,43 @@ class PyFrame(W_RootObject):
         self.valuestackdepth = valuestackdepth
         return w_x
 
-    def push(self, w_x):
+    def pushvalue(self, w_x):
         self.locals_cells_stack_w[self.valuestackdepth] = w_x
         self.valuestackdepth += 1
 
     def top(self):
         assert self.valuestackdepth >= 0
         return self.locals_cells_stack_w[self.valuestackdepth]
+
+    # we need two popvalues that return different data types:
+    # one in case we want list another in case of tuple
+    def _new_popvalues():
+        @jit.unroll_safe
+        def popvalues(self, n):
+            values_w = [None] * n
+            while True:
+                n -= 1
+                if n < 0:
+                    break
+                values_w[n] = self.popvalue()
+            return values_w
+        return popvalues
+    popvalues = _new_popvalues()
+    popvalues_mutable = _new_popvalues()
+    del _new_popvalues
+
+    @jit.unroll_safe
+    def peekvalues(self, n):
+        values_w = [None] * n
+        base = self.valuestackdepth - n
+        self.assert_stack_index(base)
+        assert base >= 0
+        while True:
+            n -= 1
+            if n < 0:
+                break
+            values_w[n] = self.locals_cells_stack_w[base+n]
+        return values_w
 
     @jit.unroll_safe
     def dropvaluesuntil(self, finaldepth):
@@ -242,6 +279,18 @@ class PyFrame(W_RootObject):
             self.locals_cells_stack_w[depth] = None
             depth -= 1
         self.valuestackdepth = finaldepth
+
+    def assert_stack_index(self, index):
+        if jit.we_are_translated():
+            return
+        self._check_stack_index(index)
+
+    def _check_stack_index(self, index):
+        code = self.getcode()
+        ncellvars = len(code.co_cellvars)
+        nfreevars = len(code.co_freevars)
+        stackstart = code.co_nlocals + ncellvars + nfreevars
+        assert index >= stackstart
 
     def append_block(self, block):
         assert block.previous is self.lastblock
@@ -256,48 +305,48 @@ class PyFrame(W_RootObject):
         return self.getcode().co_consts[operand]
 
     def POP_TOP(self, oparg, next_instr):
-        self.pop()
+        self.popvalue()
 
     def ROT_TWO(self, oparg, next_instr):
-        tos = self.pop()
-        tos2 = self.pop()
-        self.push(tos2)
-        self.push(tos)
+        tos = self.popvalue()
+        tos2 = self.popvalue()
+        self.pushvalue(tos2)
+        self.pushvalue(tos)
 
     def ROT_THREE(self, oparg, next_instr):
         assert self.valuestackdepth - 2 >= 0
-        tos = self.pop()
-        tos2 = self.pop()
-        tos3 = self.pop()
-        self.push(tos)
-        self.push(tos2)
-        self.push(tos3)
+        tos = self.popvalue()
+        tos2 = self.popvalue()
+        tos3 = self.popvalue()
+        self.pushvalue(tos)
+        self.pushvalue(tos2)
+        self.pushvalue(tos3)
 
     def ROT_FOUR(self, oparg, next_instr):
         assert self.valuestackdepth - 3 >= 0
-        tos = self.pop()
-        tos2 = self.pop()
-        tos3 = self.pop()
-        tos4 = self.pop()
-        self.push(tos)
-        self.push(tos2)
-        self.push(tos3)
-        self.push(tos4)
+        tos = self.popvalue()
+        tos2 = self.popvalue()
+        tos3 = self.popvalue()
+        tos4 = self.popvalue()
+        self.pushvalue(tos)
+        self.pushvalue(tos2)
+        self.pushvalue(tos3)
+        self.pushvalue(tos4)
 
     def UNARY_POSITIVE(self, oparg, next_instr):
-        w_x = self.pop()
+        w_x = self.popvalue()
         w_x = w_x.positive()
-        self.push(w_x)
+        self.pushvalue(w_x)
 
     def UNARY_NEGATIVE(self, oparg, next_instr):
-        w_x = self.pop()
+        w_x = self.popvalue()
         w_x = w_x.negative()
-        self.push(w_x)
+        self.pushvalue(w_x)
 
     def UNARY_NOT(self, oparg, next_instr):
-        w_x = self.pop()
+        w_x = self.popvalue()
         w_x = w_x.not_()
-        self.push(w_x)
+        self.pushvalue(w_x)
 
     def UNARY_CONVERT(self, oparg, next_instr):
         raise OpcodeNotImplementedError()
@@ -309,19 +358,19 @@ class PyFrame(W_RootObject):
         name = self.getcode().co_names[oparg]
         assert name is not None
 
-        w_value = self.pop()
+        w_value = self.popvalue()
         self.w_locals[name] = w_value
 
     def STORE_FAST(self, oparg, next_instr):
         assert oparg >= 0
-        self.locals_cells_stack_w[oparg] = self.pop()
+        self.locals_cells_stack_w[oparg] = self.popvalue()
 
     def STORE_GLOBAL(self, oparg, next_instr):
         co_names = promote(self.getcode().co_names)
         name = co_names[oparg]
         assert name is not None
 
-        w_value = self.pop()
+        w_value = self.popvalue()
         self.getcode().w_globals[name] = w_value
 
     def LOAD_NAME(self, oparg, next_instr):
@@ -335,18 +384,18 @@ class PyFrame(W_RootObject):
 
         if w_result is None:
             raise BytecodeCorruption("LOAD_NAME is failed: " + str(name))
-        self.push(w_result)
+        self.pushvalue(w_result)
 
     @always_inline
     def LOAD_FAST(self, oparg, next_instr):
         w_value = self.locals_cells_stack_w[oparg]
         if w_value is None:
             raise BytecodeCorruption("LOAD_FAST is failed")
-        self.push(w_value)
+        self.pushvalue(w_value)
 
     def LOAD_CONST(self, oparg, next_instr):
         const = self.read_const(oparg)
-        self.push(const)
+        self.pushvalue(const)
 
     def LOAD_GLOBAL(self, oparg, next_instr):
         co_names = promote(self.getcode().co_names)
@@ -354,7 +403,7 @@ class PyFrame(W_RootObject):
         assert name is not None
 
         w_result = self._load_global(name)
-        self.push(w_result)
+        self.pushvalue(w_result)
 
     def _load_global(self, key):
         w_globals = self.getcode().w_globals
@@ -364,76 +413,84 @@ class PyFrame(W_RootObject):
             raise BytecodeCorruption("_load_global is failed: %s in %s" % (key, w_globals.get_repr()))
         return w_result
 
+    @always_inline
+    def LOAD_ATTR(self, nameindex, next_instr):
+        "obj.attributename"
+        w_obj = self.popvalue()
+        w_attributename = self.getname_w(nameindex)
+        w_value = w_obj.getattr(w_attributename)
+        self.pushvalue(w_value)
+
     def BINARY_POWER(self, oparg, next_instr):
-        w_y = self.pop()
-        w_x = self.pop()
+        w_y = self.popvalue()
+        w_x = self.popvalue()
         w_z = w_x.power(w_y)
-        self.push(w_z)
+        self.pushvalue(w_z)
 
     def BINARY_MULTIPLY(self, oparg, next_instr):
-        w_y = self.pop()
-        w_x = self.pop()
+        w_y = self.popvalue()
+        w_x = self.popvalue()
         w_z = w_x.mul(w_y)
-        self.push(w_z)
+        self.pushvalue(w_z)
 
     def BINARY_DIVIDE(self, oparg, next_instr):
-        w_y = self.pop()
-        w_x = self.pop()
+        w_y = self.popvalue()
+        w_x = self.popvalue()
         w_z = w_x.div(w_y)
-        self.push(w_z)
+        self.pushvalue(w_z)
 
     def BINARY_MODULO(self, oparg, next_instr):
-        w_y = self.pop()
-        w_x = self.pop()
+        w_y = self.popvalue()
+        w_x = self.popvalue()
         w_z = w_x.mod(w_y)
-        self.push(w_z)
+        self.pushvalue(w_z)
 
     def BINARY_LSHIFT(self, oparg, next_instr):
-        w_y = self.pop()
-        w_x = self.pop()
+        w_y = self.popvalue()
+        w_x = self.popvalue()
         w_z = w_x.lshift(w_y)
-        self.push(w_z)
+        self.pushvalue(w_z)
 
     def BINARY_RSHIFT(self, oparg, next_instr):
-        w_y = self.pop()
-        w_x = self.pop()
+        w_y = self.popvalue()
+        w_x = self.popvalue()
         w_z = w_x.rshift(w_y)
-        self.push(w_z)
+        self.pushvalue(w_z)
 
     def BINARY_ADD(self, oparg, next_instr):
-        w_y = self.pop()
-        w_x = self.pop()
+        w_y = self.popvalue()
+        w_x = self.popvalue()
         w_z = w_x.add(w_y)
-        self.push(w_z)
+        self.pushvalue(w_z)
 
     def BINARY_SUBTRACT(self, oparg, next_instr):
-        w_y = self.pop()
-        w_x = self.pop()
+        w_y = self.popvalue()
+        w_x = self.popvalue()
         w_z = w_x.sub(w_y)
-        self.push(w_z)
+        self.pushvalue(w_z)
 
     def BINARY_SUBSCR(self, oparg, next_instr):
-        w_y = self.pop()
-        w_x = self.pop()
+        w_y = self.popvalue()
+        w_x = self.popvalue()
         w_z = w_x.subscr(w_y)
-        self.push(w_z)
+        self.pushvalue(w_z)
 
     def BINARY_FLOOR_DIVIDE(self, oparg, next_instr):
-        w_y = self.pop()
-        w_x = self.pop()
+        w_y = self.popvalue()
+        w_x = self.popvalue()
         w_z = w_x.div(w_y)  # TODO: floor
-        self.push(w_z)
+        self.pushvalue(w_z)
 
     def BINARY_TRUE_DIVIDE(self, oparg, next_instr):
-        w_y = self.pop()
-        w_x = self.pop()
+        w_y = self.popvalue()
+        w_x = self.popvalue()
         w_z = w_x.true_div(w_y)
-        self.push(w_z)
+        self.pushvalue(w_z)
 
     def COMPARE_OP(self, oparg, next_instr):
         opnum = oparg
-        w_2 = self.pop()
-        w_1 = self.pop()
+        w_2 = self.popvalue()
+        w_1 = self.popvalue()
         if opnum == 0:  # <
             w_result = w_1.lt(w_2)
         elif opnum == 1:  # <=
@@ -458,52 +515,53 @@ class PyFrame(W_RootObject):
             raise BytecodeCorruption("exception match not implemented")
         else:
             raise BytecodeCorruption("Bad cmp op: %d" % (opnum))
-        self.push(w_result)
+        self.pushvalue(w_result)
 
     def INPLACE_ADD(self, oparg, next_instr):
-        w_tos = self.pop()
-        w_tos1 = self.pop()
+        w_tos = self.popvalue()
+        w_tos1 = self.popvalue()
         w_result = w_tos1.add(w_tos)
-        self.push(w_result)
+        self.pushvalue(w_result)
 
     def INPLACE_SUBTRACT(self, oparg, next_instr):
-        w_tos = self.pop()
-        w_tos1 = self.pop()
+        w_tos = self.popvalue()
+        w_tos1 = self.popvalue()
         w_result = w_tos1.sub(w_tos)
-        self.push(w_result)
+        self.pushvalue(w_result)
 
     def INPLACE_MULTIPLY(self, oparg, next_instr):
-        w_tos = self.pop()
-        w_tos1 = self.pop()
+        w_tos = self.popvalue()
+        w_tos1 = self.popvalue()
         w_result = w_tos1.mul(w_tos)
-        self.push(w_result)
+        self.pushvalue(w_result)
 
     def INPLACE_DIVIDE(self, oparg, next_instr):
-        w_tos = self.pop()
-        w_tos1 = self.pop()
+        w_tos = self.popvalue()
+        w_tos1 = self.popvalue()
         w_result = w_tos1.div(w_tos)
-        self.push(w_result)
+        self.pushvalue(w_result)
 
     def INPLACE_MODULO(self, oparg, next_instr):
-        w_tos = self.pop()
-        w_tos1 = self.pop()
+        w_tos = self.popvalue()
+        w_tos1 = self.popvalue()
         w_result = w_tos1.mod(w_tos)
-        self.push(w_result)
+        self.pushvalue(w_result)
 
     def INPLACE_LSHIFT(self, oparg, next_instr):
-        w_tos = self.pop()
-        w_tos1 = self.pop()
+        w_tos = self.popvalue()
+        w_tos1 = self.popvalue()
         w_result = w_tos1.lshift(w_tos)
-        self.push(w_result)
+        self.pushvalue(w_result)
 
     def INPLACE_RSHIFT(self, oparg, next_instr):
-        w_tos = self.pop()
-        w_tos1 = self.pop()
+        w_tos = self.popvalue()
+        w_tos1 = self.popvalue()
         w_result = w_tos1.rshift(w_tos)
-        self.push(w_result)
+        self.pushvalue(w_result)
+
 
     def RETURN_VALUE(self, oparg, next_instr):
-        return self.pop()
+        return self.popvalue()
 
     def SETUP_LOOP(self, oparg, next_instr):
         block = LoopBlock(self, next_instr + oparg, self.lastblock)
@@ -515,16 +573,16 @@ class PyFrame(W_RootObject):
 
     def MAKE_FUNCTION(self, oparg, next_instr):
         argc = oparg
-        code = self.pop()
+        code = self.popvalue()
         assert isinstance(code, PyCode)
         defs_w = [None] * argc
         i = 0
         while i < argc:
-            defs_w[i] = self.pop()
+            defs_w[i] = self.popvalue()
             i += 1
         w_function = W_FunctionObject(code, self.getcode().w_globals, defs_w)
         self.getcode().w_globals[code.co_name] = w_function
-        self.push(w_function)
+        self.pushvalue(w_function)
 
     @jit.unroll_safe
     def CALL_FUNCTION(self, oparg, next_instr):
@@ -544,25 +602,25 @@ class PyFrame(W_RootObject):
             pyframe.valuestackdepth += 1
         w_value = pyframe.interpret()
         if w_value:
-            self.push(w_value)
+            self.pushvalue(w_value)
 
     def UNPACK_SEQUENCE(self, oparg, next_instr):
-        tos = self.pop()
+        tos = self.popvalue()
         assert isinstance(tos, W_IteratorObject)
-        seq = tos.value
+        seq = tos.wrappeditems
         for i in range(oparg):
-            self.push(seq[len(seq) - (i + 1)])
+            self.pushvalue(seq[len(seq) - (i + 1)])
 
     def BUILD_TUPLE(self, oparg, next_instr):
         count = oparg
         values = [None] * count
         for i in range(count):
-            values[count - i - 1] = self.pop()
+            values[count - i - 1] = self.popvalue()
         w_ret = W_TupleObject(values)
-        self.push(w_ret)
+        self.pushvalue(w_ret)
 
     def PRINT_ITME(self, oparg, next_instr):
-        w_x = self.pop()
+        w_x = self.popvalue()
         print w_x.getrepr(),  # fmt: skip
 
     def PRINT_NEWLINE(self, oparg, next_instr):
@@ -674,25 +732,26 @@ class PyFrame(W_RootObject):
             elif opcode == Bytecodes.ROT_THREE:
                 self.ROT_THREE(oparg, next_instr)
             elif opcode == Bytecodes.UNPACK_SEQUENCE:
-                self.UNPACK_SEQUENCE(oparg, next_instr)
+                # self.UNPACK_SEQUENCE(oparg, next_instr)
+                pass
             elif opcode == Bytecodes.JUMP_IF_TRUE_OR_POP:
                 tos = self.top()
                 if tos.is_true():
                     next_instr = oparg
                 else:
-                    self.pop()
+                    self.popvalue()
             elif opcode == Bytecodes.JUMP_IF_FALSE_OR_POP:
                 tos = self.top()
                 if not tos.is_true():
                     next_instr = oparg
                 else:
-                    self.pop()
+                    self.popvalue()
             elif opcode == Bytecodes.POP_JUMP_IF_TRUE:
-                tos = self.pop()
+                tos = self.popvalue()
                 if tos.is_true():
                     next_instr = oparg
             elif opcode == Bytecodes.POP_JUMP_IF_FALSE:
-                tos = self.pop()
+                tos = self.popvalue()
                 if not tos.is_true():
                     next_instr = oparg
             elif opcode == Bytecodes.JUMP_ABSOLUTE:
