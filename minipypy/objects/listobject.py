@@ -74,7 +74,13 @@ def _append(w_list, w_item):
     return w_list.wrappeditems
 
 def _inplace_mul(w_list, times):
-    w_list.wrappeditems *= times
+    num = times.toint()
+    assert not isinstance(num, rbigint)
+    w_result = [None] * len(w_list.wrappeditems) * num
+    for i in range(num):
+        for j in range(len(w_list.wrappeditems)):
+            w_result[len(w_list.wrappeditems) * i + j] = w_list.wrappeditems[j]
+    w_list.wrappeditems = w_result
 
 @jit.unroll_safe
 def _mul(w_list, times):
