@@ -11,7 +11,7 @@ if __name__ == "__main__":
     f.read(4)
     f.read(4)
     code = marshal.load(f)
-    dis.disassemble(code)
+    dis.dis(code)
     import pdb
 
     pdb.set_trace()

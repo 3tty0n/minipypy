@@ -47,7 +47,8 @@ class W_FunctionObject(W_RootObject):
 
 
 class W_BuiltinFunction(W_RootObject):
-    _immutable_fields_ = ["method"]
+    _immutable_fields_ = ["obj", "method"]
 
-    def __init__(self, method):
+    def __init__(self, obj, method):
+        self.obj = obj
         self.method = method

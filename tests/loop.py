@@ -1,7 +1,9 @@
 i = 0
-while i < 100:
+result = 0
+while i < 1000:
     i += 1
     j = 0
-    while j < 100:
+    while j < 1000:
         j += 1
-print i
+        result += 1
+print result

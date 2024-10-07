@@ -41,6 +41,10 @@ class W_NoneObject(W_RootObject):
     def is_none(self):
         return True
 
+    @jit.elidable
+    def unwrap(self):
+        return None
+
 
 W_NoneObject.W_None = W_NoneObject(None)
 
@@ -78,6 +82,10 @@ class W_BoolObject(W_RootObject):
         else:
             return W_BoolObject(False)
 
+    @jit.elidable
+    def unwrap(self):
+        return self.value
+
 
 W_BoolObject.W_True = W_BoolObject(True)
 W_BoolObject.W_False = W_BoolObject(False)
@@ -96,8 +104,15 @@ class W_IntObject(W_RootObject):
     def getrepr(self):
         return "%d" % (self.value)
 
+    def toint(self):
+        return self.value
+
     @jit.elidable
     def getvalue(self):
+        return self.value
+
+    @jit.elidable
+    def unwrap(self):
         return self.value
 
     def getstr(self):
@@ -403,6 +418,10 @@ class W_StrObject(W_RootObject):
     def getvalue(self):
         return self.value
 
+    @jit.elidable
+    def unwrap(self):
+        return self.value
+
     def getstr(self):
         return str(self.value)
 
@@ -527,6 +546,10 @@ class W_ByteObject(W_RootObject):
 
     def getstr(self):
         return str(self.value)
+
+    @jit.elidable
+    def unwrap(self):
+        return self.value
 
     def is_true(self):
         return False
