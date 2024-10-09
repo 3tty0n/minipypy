@@ -41,15 +41,15 @@ class W_ListObject(W_IteratorObject):
         return W_BoolObject.W_False
 
     def register_builtins(self):
-        self.set_method("getitem", W_BuiltinFunction(self, _getitem))
-        self.set_method("getitem_copy", W_BuiltinFunction(self, _getitem_copy))
-        self.set_method("setitem", W_BuiltinFunction(self, _setitem))
-        self.set_method("append", W_BuiltinFunction(self, _append))
-        self.set_method("inplace_mul", W_BuiltinFunction(self, _inplace_mul))
-        self.set_method("mul", W_BuiltinFunction(self, _mul))
-        self.set_method("pop", W_BuiltinFunction(self, _pop))
-        self.set_method("reverse", W_BuiltinFunction(self, _reverse))
-        self.set_method("sort", W_BuiltinFunction(self, _sort))
+        self.set_method("getitem", _setitem)
+        self.set_method("getitem_copy", _getitem_copy)
+        self.set_method("setitem", _setitem)
+        self.set_method("append", _append)
+        self.set_method("inplace_mul", _inplace_mul)
+        self.set_method("mul", _mul)
+        self.set_method("pop", _pop)
+        self.set_method("reverse", _reverse)
+        self.set_method("sort", _sort)
 
 def _getitem(w_list, index):
     return w_list.wrappeditems[index]
