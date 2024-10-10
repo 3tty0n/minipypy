@@ -46,9 +46,31 @@ class W_FunctionObject(W_RootObject):
         return True
 
 
-class W_BuiltinFunction(W_RootObject):
-    _immutable_fields_ = ["obj", "method"]
+# class W_BuiltinFunction_Arg0(W_RootObject):
 
-    def __init__(self, obj, method):
-        self.obj = obj
+#     def __init__(self, instance, method):
+#         self.instance = instance
+#         self.method = method
+
+#     def run(self):
+#         return self.method(self.instance)
+
+
+class W_BuiltinFunction_Arg1(W_RootObject):
+
+    def __init__(self, instance, method):
+        self.instance = instance
         self.method = method
+
+    def run(self, arg):
+        return self.method(self.instance, arg)
+
+
+# class W_BuiltinFunction_Arg2(W_RootObject):
+
+#     def __init__(self, instance, method):
+#         self.instance = instance
+#         self.method = method
+
+#     def run(self, arg0, arg1):
+#         return self.method(self.instance, arg0, arg1)

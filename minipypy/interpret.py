@@ -10,7 +10,7 @@ from rpython.tool.sourcetools import func_with_new_name
 
 from minipypy.frontend import rpy_load_py2
 from minipypy.objects.baseobject import *
-from minipypy.objects.function import W_BuiltinFunction, W_FunctionObject
+from minipypy.objects.function import *
 from minipypy.objects.dictobject import W_Dict
 from minipypy.objects.iteratorobject import W_IteratorObject
 from minipypy.objects.sliceobject import W_SliceObject
@@ -419,6 +419,7 @@ class PyFrame(W_RootObject):
         w_obj = self.popvalue()
         w_attributename = self.getname_w(nameindex)
         w_value = w_obj.getattr(w_attributename)
+        # TODO: push the pair of obj and attributename
         self.pushvalue(w_value)
 
     def BINARY_POWER(self, oparg, next_instr):
@@ -587,8 +588,14 @@ class PyFrame(W_RootObject):
 
     def BUILD_LIST(self, itemcount, next_instr):
         items = self.popvalues_mutable(itemcount)
-        w_list = W_ListObject(items).instantiate()
+        w_list = W_ListObject(items)
         self.pushvalue(w_list)
+
+    def BUILD_CLASS(self, oparg, next_instr):
+        method_dict = self.popvalue()
+        base_class = self.popvalue()
+        class_name = self.popvalue()
+
 
     def RETURN_VALUE(self, oparg, next_instr):
         return self.popvalue()
@@ -625,8 +632,10 @@ class PyFrame(W_RootObject):
         w_function = self.popvalue()
         if isinstance(w_function, W_FunctionObject):
             self._call_function(w_function, args)
-        elif isinstance(w_function, W_BuiltinFunction):
-            self._call_function_instance(w_function, args)
+        # elif isinstance(w_function, W_BuiltinFunction_Arg0):
+        #     self._call_builtin_arg0(w_function)
+        elif isinstance(w_function, W_BuiltinFunction_Arg1):
+            self._call_builtin_arg1(w_function, args)
         else:
             raise BytecodeCorruption("w_function is not W_FunctionObject but %s" % (str(w_function)))
 
@@ -641,15 +650,12 @@ class PyFrame(W_RootObject):
         if w_value:
             self.pushvalue(w_value)
 
-    def _call_function_instance(self, w_function, args):
-        if len(args) == 0:
-            w_result = w_function.method()
-            self.pushvalue(w_result)
-            return
-        args_t = (args[0])
-        for i in range(1, len(args)):
-            args_t = args_t + (args[i],)
-        w_result = w_function.method(*args_t)
+    def _call_builtin_arg0(self, w_function):
+        w_result = w_function.run()
+        self.pushvalue(w_result)
+
+    def _call_builtin_arg1(self, w_function, args):
+        w_result = w_function.run(args[0])
         self.pushvalue(w_result)
 
     def UNPACK_SEQUENCE(self, oparg, next_instr):
@@ -731,6 +737,8 @@ class PyFrame(W_RootObject):
                 self.UNARY_INVERT(opcode, next_instr)
             elif opcode == Bytecodes.BUILD_TUPLE:
                 self.BUILD_TUPLE(oparg, next_instr)
+            elif opcode == Bytecodes.BUILD_CLASS:
+                self.BUILD_CLASS(oparg, next_instr)
             elif opcode == Bytecodes.COMPARE_OP:
                 self.COMPARE_OP(oparg, next_instr)
             elif opcode == Bytecodes.INPLACE_ADD:

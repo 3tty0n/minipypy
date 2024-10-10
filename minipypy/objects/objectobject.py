@@ -26,8 +26,8 @@ EMPTY_MAP = Map()
 
 
 class W_Instance(W_RootObject):
-    def __init__(self, cls):
-        self.cls = cls
+    def __init__(self, obj):
+        self.obj = obj
         self.map = EMPTY_MAP
         self.storage = []
 
@@ -35,7 +35,7 @@ class W_Instance(W_RootObject):
         return self.getrepr()
 
     def getrepr(self):
-        return self.cls.getrepr()
+        return self.obj.getrepr()
 
     def getfield(self, name):
         map = hint(self.map, promote=True)
@@ -57,4 +57,4 @@ class W_Instance(W_RootObject):
         try:
             return self.getfield(name)
         except AttributeError:
-            return self.cls.find_method(name)
+            return self.obj.find_method(name)

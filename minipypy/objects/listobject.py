@@ -5,7 +5,7 @@ from rpython.rlib.rbigint import rbigint
 from minipypy.objects.baseobject import W_BoolObject, W_IntObject, W_StrObject, WObjectOperationException, WObjectOperationNotImplemented
 from minipypy.objects.iteratorobject import W_IteratorObject
 from minipypy.objects.objectobject import W_Instance, W_Class
-from minipypy.objects.function import W_BuiltinFunction
+from minipypy.objects.function import *
 
 def get_list_strategy(w_list, sizehint):
     if not w_list:
@@ -16,10 +16,17 @@ class W_ListObject(W_IteratorObject):
     strategy = None
 
     def __init__(self, wrappeditems):
-        W_Class.__init__(self,  "list")
         assert isinstance(wrappeditems, list)
         self.wrappeditems = wrappeditems
+        self.methods = {}
         self.register_builtins()
+
+    def getattr(self, name):
+        assert isinstance(name, W_StrObject)
+        return self.methods[name.value]
+
+    def _set_method(self, name, value):
+        self.methods[name] = value
 
     def getrepr(self):
         s = "["
@@ -41,20 +48,21 @@ class W_ListObject(W_IteratorObject):
         return W_BoolObject.W_False
 
     def register_builtins(self):
-        self.set_method("getitem", _setitem)
-        self.set_method("getitem_copy", _getitem_copy)
-        self.set_method("setitem", _setitem)
-        self.set_method("append", _append)
-        self.set_method("inplace_mul", _inplace_mul)
-        self.set_method("mul", _mul)
-        self.set_method("pop", _pop)
-        self.set_method("reverse", _reverse)
-        self.set_method("sort", _sort)
+        self._set_method("getitem", W_BuiltinFunction_Arg1(self, _getitem))
+        self._set_method("getitem_copy", W_BuiltinFunction_Arg1(self, _getitem_copy))
+        # self.set_method("setitem", _setitem)
+        self._set_method("append", W_BuiltinFunction_Arg1(self, _append))
+        # self.set_method("inplace_mul", _inplace_mul)
+        # self.set_method("mul", _mul)
+        # self.set_method("pop", _pop)
+        # self.set_method("reverse", _reverse)
+        # self.set_method("sort", _sort)
 
 def _getitem(w_list, index):
-    return w_list.wrappeditems[index]
+    assert isinstance(index, W_IntObject)
+    return w_list.wrappeditems[index.value]
 
-def _getitem_copy(w_list):
+def _getitem_copy(w_list, index):
     res = [None] * len(w_list.wrappeditems)
     prevvalue = w_list.wrappeditems[0]
     w_item = prevvalue
@@ -64,14 +72,14 @@ def _getitem_copy(w_list):
         if jit.we_are_jitted():
             prevvalue = item
         res[index] = w_item
-    return res
+    return W_ListObject(res)
 
 def _setitem(w_list, index, w_item):
     w_list.wrappeditems[index] = w_item
 
 def _append(w_list, w_item):
     w_list.wrappeditems.append(w_item)
-    return w_list.wrappeditems
+    return w_list
 
 def _inplace_mul(w_list, times):
     num = times.toint()
