@@ -46,31 +46,33 @@ class W_FunctionObject(W_RootObject):
         return True
 
 
-# class W_BuiltinFunction_Arg0(W_RootObject):
 
-#     def __init__(self, instance, method):
-#         self.instance = instance
-#         self.method = method
+class W_InstanceMethod(W_RootObject):
+    "Like types.InstanceMethod, but with a reasonable (structural) equality."
 
-#     def run(self):
-#         return self.method(self.instance)
+    def __init__(self, im_func, im_self, im_class):
+        self.im_func = im_func
+        self.im_self = im_self
+        self.im_class = im_class
 
+    def run(self, *args):
+        firstarg = self.im_self
+        if firstarg is None:
+            if not args or not isinstance(args[0], self.im_class):
+                raise TypeError(
+                    "must be called with %r instance as first argument" % (
+                    self.im_class,))
+            firstarg = args[0]
+            args = args[1:]
+        return self.im_func(firstarg, *args)
 
-class W_BuiltinFunction_Arg1(W_RootObject):
+    def __eq__(self, other):
+        return isinstance(other, W_InstanceMethod) and (
+            self.im_func == other.im_func and
+            self.im_self == other.im_self)
 
-    def __init__(self, instance, method):
-        self.instance = instance
-        self.method = method
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
-    def run(self, arg):
-        return self.method(self.instance, arg)
-
-
-# class W_BuiltinFunction_Arg2(W_RootObject):
-
-#     def __init__(self, instance, method):
-#         self.instance = instance
-#         self.method = method
-
-#     def run(self, arg0, arg1):
-#         return self.method(self.instance, arg0, arg1)
+    def __hash__(self):
+        return hash((self.im_func, self.im_self))

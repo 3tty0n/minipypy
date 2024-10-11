@@ -245,6 +245,8 @@ class PyFrame(W_RootObject):
     def _new_popvalues():
         @jit.unroll_safe
         def popvalues(self, n):
+            if n <= 0:
+                return []
             values_w = [None] * n
             while True:
                 n -= 1
@@ -634,8 +636,10 @@ class PyFrame(W_RootObject):
             self._call_function(w_function, args)
         # elif isinstance(w_function, W_BuiltinFunction_Arg0):
         #     self._call_builtin_arg0(w_function)
-        elif isinstance(w_function, W_BuiltinFunction_Arg1):
-            self._call_builtin_arg1(w_function, args)
+        elif isinstance(w_function, W_InstanceMethod):
+            w_value = w_function.run(args[0]) # TODO: workaround
+            if w_value:
+                self.pushvalue(w_value)
         else:
             raise BytecodeCorruption("w_function is not W_FunctionObject but %s" % (str(w_function)))
 
@@ -649,14 +653,6 @@ class PyFrame(W_RootObject):
         w_value = pyframe.interpret()
         if w_value:
             self.pushvalue(w_value)
-
-    def _call_builtin_arg0(self, w_function):
-        w_result = w_function.run()
-        self.pushvalue(w_result)
-
-    def _call_builtin_arg1(self, w_function, args):
-        w_result = w_function.run(args[0])
-        self.pushvalue(w_result)
 
     def UNPACK_SEQUENCE(self, oparg, next_instr):
         tos = self.popvalue()
