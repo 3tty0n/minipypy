@@ -1,4 +1,4 @@
-from minipypy.objects.baseobject import W_RootObject, W_StrObject
+from minipypy.objects.baseobject import W_Root, W_StrObject
 from minipypy.objects.dictobject import W_Dict
 from minipypy.objects.listobject import W_ListObject
 
@@ -7,7 +7,7 @@ from rpython.rlib.objectmodel import compute_hash
 def globals_w_key_eq(key, other):
     return compute_hash(key) == compute_hash(other)
 
-class PyCode(W_RootObject):
+class PyCode(W_Root):
 
     _immutable_fields_ = [
         "co_argcount",

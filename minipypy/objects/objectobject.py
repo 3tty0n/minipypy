@@ -1,9 +1,9 @@
-from minipypy.objects.baseobject import W_NoneObject, W_RootObject, W_BoolObject, W_StrObject
+from minipypy.objects.baseobject import W_Root
 from minipypy.objects.dictobject import Map
 
 from rpython.rlib.jit import elidable, not_rpython, hint
 
-class W_Class(W_RootObject):
+class W_Class(W_Root):
     def __init__(self, name):
         self.name = name
         self.methods = {} # { key: str -> value: method }
@@ -12,22 +12,21 @@ class W_Class(W_RootObject):
         return W_Instance(self)
 
     def find_method(self, name):
-        assert isinstance(name, W_StrObject)
-        result = self.methods.get(name.value)
+        result = self.methods.get(name)
         if result is not None:
             return result
         raise AttributeError(name)
 
-    def set_method(self, name, value):
+    def write_method(self, name, value):
         self.methods[name] = value
 
 
 EMPTY_MAP = Map()
 
 
-class W_Instance(W_RootObject):
-    def __init__(self, obj):
-        self.obj = obj
+class W_Instance(W_Root):
+    def __init__(self, cls):
+        self.cls = cls
         self.map = EMPTY_MAP
         self.storage = []
 
@@ -35,7 +34,7 @@ class W_Instance(W_RootObject):
         return self.getrepr()
 
     def getrepr(self):
-        return self.obj.getrepr()
+        return self.cls.getrepr()
 
     def getfield(self, name):
         map = hint(self.map, promote=True)
@@ -57,4 +56,4 @@ class W_Instance(W_RootObject):
         try:
             return self.getfield(name)
         except AttributeError:
-            return self.obj.find_method(name)
+            return self.cls.find_method(name)

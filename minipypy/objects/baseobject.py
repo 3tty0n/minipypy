@@ -1,6 +1,6 @@
 from rpython.rlib import jit
 from rpython.rlib.rbigint import rbigint
-from rpython.rlib.objectmodel import instantiate
+from rpython.rlib.objectmodel import instantiate, compute_hash
 
 prebuilt_from = 0
 prebuilt_to = 100
@@ -17,13 +17,13 @@ class WObjectOperationException(RuntimeError):
 WObjectOperationNotImplemented = WObjectOperationException("Not implemented")
 
 
-class W_RootObject(object):
+class W_Root(object):
 
     def is_none(self):
         return False
 
 
-class W_NoneObject(W_RootObject):
+class W_NoneObject(W_Root):
     _immutable_fields_ = ["value"]
 
     def __init__(self, value):
@@ -49,7 +49,7 @@ class W_NoneObject(W_RootObject):
 W_NoneObject.W_None = W_NoneObject(None)
 
 
-class W_BoolObject(W_RootObject):
+class W_BoolObject(W_Root):
     _immutable_fields_ = ["value"]
 
     def __init__(self, value):
@@ -91,7 +91,7 @@ W_BoolObject.W_True = W_BoolObject(True)
 W_BoolObject.W_False = W_BoolObject(False)
 
 
-class W_IntObject(W_RootObject):
+class W_IntObject(W_Root):
     _immutable_fields_ = ["value"]
     PREBUILT = []
 
@@ -252,7 +252,7 @@ class W_IntObject(W_RootObject):
         return W_BoolObject.W_True
 
 
-class W_LongObject(W_RootObject):
+class W_LongObject(W_Root):
     _immutable_fields_ = ["value"]
     PREBUILT = []
 
@@ -395,7 +395,7 @@ class W_LongObject(W_RootObject):
         return other.le(self)
 
 
-class W_StrObject(W_RootObject):
+class W_StrObject(W_Root):
     _immutable_fields_ = ["value"]
 
     def __init__(self, value):
@@ -517,8 +517,11 @@ class W_StrObject(W_RootObject):
             )
         return W_BoolObject.W_False
 
+    def __hash__(self):
+        return compute_hash(self.value)
 
-class W_ByteObject(W_RootObject):
+
+class W_ByteObject(W_Root):
     _immutable_fields_ = ["value"]
 
     def __init__(self, value):

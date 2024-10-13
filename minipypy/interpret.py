@@ -15,7 +15,7 @@ from minipypy.objects.dictobject import W_Dict
 from minipypy.objects.iteratorobject import W_IteratorObject
 from minipypy.objects.sliceobject import W_SliceObject
 from minipypy.objects.tupleobject import W_TupleObject
-from minipypy.objects.listobject import W_ListObject
+from minipypy.objects.listobject import W_List, W_ListObject
 from minipypy.objects.pycode import PyCode
 from minipypy.opcode27 import Bytecodes, opmap, opname, HAVE_ARGUMENT
 
@@ -53,7 +53,7 @@ class BytecodeCorruption(RuntimeError):
     pass
 
 
-class SuspendedUnroller(W_RootObject):
+class SuspendedUnroller(W_Root):
     """Abstract base class for interpreter-level objects that
     instruct the interpreter to change the control flow and the
     block stack.
@@ -183,7 +183,7 @@ class LoopBlock(FrameBlock):
             return r_uint(self.handlerposition)
 
 
-class PyFrame(W_RootObject):
+class PyFrame(W_Root):
     _virtualizable_ = [
         "last_intr", "code",
         "valuestackdepth",
@@ -421,7 +421,6 @@ class PyFrame(W_RootObject):
         w_obj = self.popvalue()
         w_attributename = self.getname_w(nameindex)
         w_value = w_obj.getattr(w_attributename)
-        # TODO: push the pair of obj and attributename
         self.pushvalue(w_value)
 
     def BINARY_POWER(self, oparg, next_instr):
@@ -590,7 +589,7 @@ class PyFrame(W_RootObject):
 
     def BUILD_LIST(self, itemcount, next_instr):
         items = self.popvalues_mutable(itemcount)
-        w_list = W_ListObject(items)
+        w_list = W_List().instantiate(items)
         self.pushvalue(w_list)
 
     def BUILD_CLASS(self, oparg, next_instr):
@@ -634,8 +633,6 @@ class PyFrame(W_RootObject):
         w_function = self.popvalue()
         if isinstance(w_function, W_FunctionObject):
             self._call_function(w_function, args)
-        # elif isinstance(w_function, W_BuiltinFunction_Arg0):
-        #     self._call_builtin_arg0(w_function)
         elif isinstance(w_function, W_InstanceMethod):
             w_value = w_function.run(args[0]) # TODO: workaround
             if w_value:

@@ -1,8 +1,8 @@
-from minipypy.objects.baseobject import W_RootObject
+from minipypy.objects.baseobject import W_Root
 
 import sys
 
-class W_SliceObject(W_RootObject):
+class W_SliceObject(W_Root):
     _immutable_fields_ = ['w_start', 'w_stop', 'w_step']
 
     def __init__(self, w_start, w_stop, w_step):

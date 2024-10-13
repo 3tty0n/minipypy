@@ -1,13 +1,14 @@
-from minipypy.objects.baseobject import W_RootObject
+from minipypy.objects.baseobject import W_Root
 
 from rpython.rlib import jit
+from rpython.rlib.objectmodel import compute_hash
 
 @jit.elidable_promote()
 def _get_immutable_code(func):
     assert not func.can_change_code
     return func.code
 
-class W_FunctionObject(W_RootObject):
+class W_FunctionObject(W_Root):
     can_change_code = True
     _immutable_fields_ = ['code?',
                           'w_func_globals?',
@@ -47,7 +48,7 @@ class W_FunctionObject(W_RootObject):
 
 
 
-class W_InstanceMethod(W_RootObject):
+class W_InstanceMethod(W_Root):
     "Like types.InstanceMethod, but with a reasonable (structural) equality."
 
     def __init__(self, im_func, im_self, im_class):
@@ -75,4 +76,4 @@ class W_InstanceMethod(W_RootObject):
         return not self.__eq__(other)
 
     def __hash__(self):
-        return hash((self.im_func, self.im_self))
+        return compute_hash((self.im_func, self.im_self))
