@@ -108,10 +108,6 @@ class W_IntObject(W_RootObject):
         return self.value
 
     @jit.elidable
-    def getvalue(self):
-        return self.value
-
-    @jit.elidable
     def unwrap(self):
         return self.value
 
@@ -154,7 +150,7 @@ class W_IntObject(W_RootObject):
         if isinstance(other, W_IntObject):
             return W_IntObject(self.value - other.value)
         elif isinstance(other, W_LongObject):
-            return W_LongObject(rbigint.fromint(self.value).sub(other.getvalue()))
+            return W_LongObject(rbigint.fromint(self.value).sub(other.value))
         else:
             raise WObjectOperationException("Unexpected object: %s" % (other))
 
@@ -162,7 +158,7 @@ class W_IntObject(W_RootObject):
         if isinstance(other, W_IntObject):
             return W_IntObject(self.value * other.value)
         elif isinstance(other, W_LongObject):
-            return W_LongObject(rbigint.fromint(self.value).mul(other.getvalue()))
+            return W_LongObject(rbigint.fromint(self.value).mul(other.value))
         else:
             raise WObjectOperationException("Unexpected object: %s" % (other))
 
@@ -170,7 +166,7 @@ class W_IntObject(W_RootObject):
         if isinstance(other, W_IntObject):
             return W_IntObject(self.value / other.value)
         elif isinstance(other, W_LongObject):
-            return W_LongObject(rbigint.fromint(self.value).div(other.getvalue()))
+            return W_LongObject(rbigint.fromint(self.value).div(other.value))
         else:
             raise WObjectOperationException("Unexpected object: %s" % (other))
 
@@ -281,10 +277,6 @@ class W_LongObject(W_RootObject):
     def toint(self):
         return self.value.toint()
 
-    @jit.elidable
-    def getvalue(self):
-        return self.value
-
     def getstr(self):
         return str(self.value)
 
@@ -311,31 +303,31 @@ class W_LongObject(W_RootObject):
 
     def add(self, other):
         if isinstance(other, W_IntObject):
-            return W_LongObject(self.value.add(rbigint.fromint(other.getvalue())))
+            return W_LongObject(self.value.add(rbigint.fromint(other.value)))
         if isinstance(other, W_LongObject):
-            return W_LongObject(self.value.add(other.getvalue()))
+            return W_LongObject(self.value.add(other.value))
         raise WObjectOperationException("Unexpected object: %s" % (other))
 
     def sub(self, other):
         if isinstance(other, W_IntObject):
-            return W_LongObject(self.value.sub(rbigint.fromint(other.getvalue())))
+            return W_LongObject(self.value.sub(rbigint.fromint(other.value)))
         if isinstance(other, W_LongObject):
-            return W_LongObject(self.value.sub(other.getvalue()))
+            return W_LongObject(self.value.sub(other.value))
         raise WObjectOperationException("Unexpected object: %s" % (other))
 
     def mul(self, other):
         if isinstance(other, W_IntObject):
-            return W_LongObject(self.value.mul(rbigint.fromint(other.getvalue())))
+            return W_LongObject(self.value.mul(rbigint.fromint(other.value)))
         elif isinstance(other, W_LongObject):
-            return W_LongObject(self.value.mul(other.getvalue()))
+            return W_LongObject(self.value.mul(other.value))
         else:
             raise WObjectOperationException("Unexpected object: %s" % (other))
 
     def true_div(self, other):
         if isinstance(other, W_IntObject):
-            return W_LongObject(self.value.div(rbigint.fromint(other.getvalue())))
+            return W_LongObject(self.value.div(rbigint.fromint(other.value)))
         if isinstance(other, W_LongObject):
-            return W_LongObject(self.value.div(other.getvalue()))
+            return W_LongObject(self.value.div(other.value))
         raise WObjectOperationException("Unexpected object: %s" % (other))
 
     def mod(self, other):
@@ -368,10 +360,10 @@ class W_LongObject(W_RootObject):
             return W_BoolObject.W_False
         if isinstance(other, W_IntObject):
             return W_BoolObject.from_bool(
-                self.getvalue().eq(rbigint.fromint(other.getvalue()))
+                self.value.eq(rbigint.fromint(other.value))
             )
         if isinstance(other, W_LongObject):
-            return W_BoolObject.from_bool(self.getvalue().eq(other.getvalue()))
+            return W_BoolObject.from_bool(self.value.eq(other.value))
         return W_BoolObject.W_False
 
     def lt(self, other):
@@ -379,10 +371,10 @@ class W_LongObject(W_RootObject):
             return W_BoolObject.W_False
         if isinstance(other, W_IntObject):
             return W_BoolObject.from_bool(
-                self.getvalue().lt(rbigint.fromint(other.getvalue()))
+                self.value.lt(rbigint.fromint(other.value))
             )
         if isinstance(other, W_LongObject):
-            return W_BoolObject.from_bool(self.getvalue().lt(other.getvalue()))
+            return W_BoolObject.from_bool(self.value.lt(other.value))
         return W_BoolObject.W_True
 
     def le(self, other):
@@ -390,10 +382,10 @@ class W_LongObject(W_RootObject):
             return W_BoolObject.W_False
         if isinstance(other, W_IntObject):
             return W_BoolObject.from_bool(
-                self.getvalue().le(rbigint.fromint(other.getvalue()))
+                self.value.le(rbigint.fromint(other.value))
             )
         if isinstance(other, W_LongObject):
-            return W_BoolObject.from_bool(self.getvalue().le(other.getvalue()))
+            return W_BoolObject.from_bool(self.value.le(other.value))
         return W_BoolObject.W_True
 
     def gt(self, other):
@@ -414,9 +406,6 @@ class W_StrObject(W_RootObject):
 
     def getrepr(self):
         return "'%s'" % self.value
-
-    def getvalue(self):
-        return self.value
 
     @jit.elidable
     def unwrap(self):
@@ -453,7 +442,7 @@ class W_StrObject(W_RootObject):
 
     def mul(self, other):
         if isinstance(other, W_IntObject):
-            return W_StrObject(self.getvalue() * other.getvalue())
+            return W_StrObject(self.value * other.value)
         else:
             raise WObjectOperationException("Unexpected object: %s" % (other))
 
@@ -467,7 +456,7 @@ class W_StrObject(W_RootObject):
         if self.value == "":
             return W_BoolObject.W_False
         if isinstance(other, W_StrObject):
-            return W_BoolObject.from_bool(self.getvalue() < other.getvalue())
+            return W_BoolObject.from_bool(self.value < other.value)
         if isinstance(other, W_IntObject):
             raise WObjectOperationException("operation strign < int is not implemented")
         if isinstance(other, W_LongObject):
@@ -480,7 +469,7 @@ class W_StrObject(W_RootObject):
         if self.value == "":
             return W_BoolObject.W_False
         if isinstance(other, W_StrObject):
-            return W_BoolObject.from_bool(self.getvalue() <= other.getvalue())
+            return W_BoolObject.from_bool(self.value <= other.value)
         if isinstance(other, W_IntObject):
             raise WObjectOperationException("operation strign < int is not implemented")
         if isinstance(other, W_LongObject):
@@ -493,7 +482,7 @@ class W_StrObject(W_RootObject):
         if self.value == "":
             return W_BoolObject.W_False
         if isinstance(other, W_StrObject):
-            return W_BoolObject.from_bool(self.getvalue() > other.getvalue())
+            return W_BoolObject.from_bool(self.value > other.value)
         if isinstance(other, W_IntObject):
             raise WObjectOperationException("operation strign < int is not implemented")
         if isinstance(other, W_LongObject):
@@ -506,7 +495,7 @@ class W_StrObject(W_RootObject):
         if self.value == "":
             return W_BoolObject.W_False
         if isinstance(other, W_StrObject):
-            return W_BoolObject.from_bool(self.getvalue() >= other.getvalue())
+            return W_BoolObject.from_bool(self.value >= other.value)
         if isinstance(other, W_IntObject):
             raise WObjectOperationException("operation strign < int is not implemented")
         if isinstance(other, W_LongObject):
@@ -519,7 +508,7 @@ class W_StrObject(W_RootObject):
         if self.value == "":
             return W_BoolObject.W_False
         if isinstance(other, W_StrObject):
-            return W_BoolObject.from_bool(self.getvalue() == other.getvalue())
+            return W_BoolObject.from_bool(self.value == other.value)
         if isinstance(other, W_IntObject):
             raise WObjectOperationException("operation strign < int is not implemented")
         if isinstance(other, W_LongObject):
@@ -540,9 +529,6 @@ class W_ByteObject(W_RootObject):
 
     def getrepr(self):
         return "%s(%r)" % (self.__class__.__name__, self._value)
-
-    def getvalue(self):
-        return self.value
 
     def getstr(self):
         return str(self.value)
