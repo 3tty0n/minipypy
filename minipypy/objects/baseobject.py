@@ -517,6 +517,9 @@ class W_StrObject(W_Root):
             )
         return W_BoolObject.W_False
 
+    def eq_str(self, other):
+        return self.eq(W_StrObject(other))
+
     def __hash__(self):
         return compute_hash(self.value)
 
