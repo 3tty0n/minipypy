@@ -1,5 +1,6 @@
 import sys
 
+from minipypy.objects.classobject import W_ClassObject
 from rpython.rlib import jit
 from rpython.rlib.jit import JitDriver, hint, promote, promote_string, not_rpython
 from rpython.rlib.debug import ll_assert_not_none, make_sure_not_resized, check_nonneg
@@ -407,13 +408,22 @@ class PyFrame(W_Root):
         w_result = self._load_global(name)
         self.pushvalue(w_result)
 
+    @always_inline
     def _load_global(self, key):
+        assert isinstance(key, W_StrObject)
+        if key.value == "__name__":
+            # __name__ equals to the current module name
+            return self.getcode().co_filename # co_filename is w_object
+
         w_globals = self.getcode().w_globals
         w_result = w_globals[key]
 
         if w_result is None:
-            raise BytecodeCorruption("_load_global is failed: %s in %s" % (key, w_globals.get_repr()))
+            raise BytecodeCorruption("_load_global is failed: %s in %s" % (key, w_globals.getrepr()))
         return w_result
+
+    def LOAD_LOCALS(self, oparg, next_instr):
+        self.pushvalue(self.w_locals)
 
     @always_inline
     def LOAD_ATTR(self, nameindex, next_instr):
@@ -596,7 +606,8 @@ class PyFrame(W_Root):
         method_dict = self.popvalue()
         base_class = self.popvalue()
         class_name = self.popvalue()
-
+        w_class = W_ClassObject(class_name, base_class, method_dict)
+        self.pushvalue(w_class)
 
     def RETURN_VALUE(self, oparg, next_instr):
         return self.popvalue()
@@ -634,19 +645,26 @@ class PyFrame(W_Root):
         if isinstance(w_function, W_FunctionObject):
             self._call_function(w_function, args)
         elif isinstance(w_function, W_InstanceMethod):
-            if argnum == 0:
-                w_value = w_function.run()
-            elif argnum == 1:
-                w_value = w_function.run(args[0])
-            elif argnum == 2:
-                args_t = (args[0], args[1])
-                w_value = w_function.run(*args_t)
-            else:
-                raise BytecodeCorruption("Too many arguments for %s" % (str(w_function)))
-            if w_value:
-                self.pushvalue(w_value)
+            self._call_instancemethod(w_function, args)
+        elif isinstance(w_function, W_ClassObject):
+            w_instance = w_function.instantiate()
+            self.pushvalue(w_instance)
         else:
             raise BytecodeCorruption("w_function is not W_FunctionObject but %s" % (str(w_function)))
+
+    def _call_instancemethod(self, w_function, args):
+        argnum = len(args)
+        if argnum == 0:
+            w_value = w_function.run()
+        elif argnum == 1:
+            w_value = w_function.run(args[0])
+        elif argnum == 2:
+            args_t = (args[0], args[1])
+            w_value = w_function.run(*args_t)
+        else:
+            raise BytecodeCorruption("Too many arguments for %s" % (str(w_function)))
+        if w_value:
+            self.pushvalue(w_value)
 
     def _build_argt_1(self, args):
         return (args[0])
@@ -792,6 +810,8 @@ class PyFrame(W_Root):
                 self.LOAD_GLOBAL(oparg, next_instr)
             elif opcode == Bytecodes.LOAD_ATTR:
                 self.LOAD_ATTR(oparg, next_instr)
+            elif opcode == Bytecodes.LOAD_LOCALS:
+                self.LOAD_LOCALS(oparg, next_instr)
             elif opcode == Bytecodes.PRINT_ITEM:
                 self.PRINT_ITME(oparg, next_instr)
             elif opcode == Bytecodes.PRINT_NEWLINE:
