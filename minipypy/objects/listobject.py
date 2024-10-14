@@ -6,9 +6,8 @@ from rpython.rlib.rbigint import rbigint
 from rpython.rlib.objectmodel import compute_hash, r_dict
 from rpython.tool.descriptor import InstanceMethod
 
-from minipypy.objects.baseobject import W_BoolObject, W_IntObject, W_StrObject
+from minipypy.objects.baseobject import W_BoolObject, W_IntObject, W_NoneObject, W_StrObject
 from minipypy.objects.iteratorobject import W_IteratorObject
-from minipypy.objects.objectobject import W_Instance, W_Class
 from minipypy.objects.mapobject import Map
 from minipypy.objects.function import *
 
@@ -27,7 +26,12 @@ def key_hash(key):
 class W_List(W_Root):
 
     def __init__(self):
-        self.methods = {}
+        self.methods = r_dict(key_eq, key_hash)
+        self.write_method("append", _append)
+        self.write_method("pop", _pop)
+
+    def write_method(self, name, value):
+        self.methods[W_StrObject(name)] = value
 
     def instantiate(self, wrappteditems):
         return W_ListObject(self, wrappteditems)
@@ -39,16 +43,11 @@ class W_ListObject(W_IteratorObject):
     def __init__(self, cls, wrappeditems):
         self.cls = cls
         self.wrappeditems = wrappeditems
-        self.methods = r_dict(key_eq, key_hash)
-        self.write_method("append", W_InstanceMethod(_append, self, self.cls))
-
-    def write_method(self, name, value):
-        self.methods[W_StrObject(name)] = value
 
     def find_method(self, name):
-        result = self.methods.get(name, None)
+        result = self.cls.methods.get(name, None)
         if result is not None:
-            return result
+            return W_InstanceMethod(result, self, self.cls)
         raise AttributeError(name)
 
     def getattr(self, name):
@@ -81,6 +80,7 @@ class W_ListObject(W_IteratorObject):
 
 
 def _append(w_list, *args):
+    assert len(args) > 0, "append should take one argument"
     w_item = args[0]
     w_list.wrappeditems.append(w_item)
     return w_list
@@ -136,8 +136,13 @@ def _mul(w_list, *args, **kwargs):
 
 
 def _pop(w_list, *args):
+    if len(args) == 0:
+        w_list.wrappeditems.pop()
+        return W_NoneObject.W_None
+
     index = args[0]
-    assert isinstance(index, W_IntObject)
+    assert isinstance(index, W_IntObject), \
+        "%s is not W_IntObject" % (index.getrepr())
     index = index.value
     if index < 0:
         raise IndexError

@@ -634,11 +634,25 @@ class PyFrame(W_Root):
         if isinstance(w_function, W_FunctionObject):
             self._call_function(w_function, args)
         elif isinstance(w_function, W_InstanceMethod):
-            w_value = w_function.run(args[0]) # TODO: workaround
+            if argnum == 0:
+                w_value = w_function.run()
+            elif argnum == 1:
+                w_value = w_function.run(args[0])
+            elif argnum == 2:
+                args_t = (args[0], args[1])
+                w_value = w_function.run(*args_t)
+            else:
+                raise BytecodeCorruption("Too many arguments for %s" % (str(w_function)))
             if w_value:
                 self.pushvalue(w_value)
         else:
             raise BytecodeCorruption("w_function is not W_FunctionObject but %s" % (str(w_function)))
+
+    def _build_argt_1(self, args):
+        return (args[0])
+
+    def _build_argt_2(self, args):
+        return (args[0], args[1])
 
     def _call_function(self, w_function, args):
         code = w_function.getcode()
