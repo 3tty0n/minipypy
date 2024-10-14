@@ -97,6 +97,8 @@ def atom_str(f):
 # inlined version to save a recursion level
 def get_tuple(f):
     lng = get_lng(f)
+    if lng == 0:
+        return []
     res_w = [None] * lng
     idx = 0
     w_ret = None
