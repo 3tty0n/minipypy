@@ -404,6 +404,13 @@ class W_StrObject(W_Root):
     def __repr__(self):
         return "'%s'" % self.value
 
+    def __eq__(self, other):
+        if isinstance(other, str):
+            return self.value == other
+        if isinstance(other, W_StrObject):
+            return self.value == other.value
+        return False
+
     def getrepr(self):
         return "'%s'" % self.value
 

@@ -46,6 +46,36 @@ class W_FunctionObject(W_Root):
     def is_true(self):
         return True
 
+    def call_args(self, args, argum):
+        from minipypy.interpret import PyFrame
+        code = self.getcode()
+        pyframe = PyFrame(code)
+        for i in range(len(args)):
+            assert i >= 0
+            pyframe.locals_cells_stack_w[i] = args[i]
+            pyframe.valuestackdepth += 1
+        return pyframe.interpret()
+
+
+class W_Method(W_Root):
+    """A method is a function bound to a specific instance or class."""
+    _immutable_fields_ = ['w_function', 'w_instance', 'w_class']
+    def __init__(self, w_function, w_instance, w_class):
+        self.w_function = w_function
+        self.w_instance = w_instance
+        self.w_class = w_class
+
+    def call_obj_args(self, args, argnum):
+        from minipypy.interpret import PyFrame
+        w_obj = self.w_instance
+        code = self.w_function.getcode()
+        pyframe = PyFrame(code)
+        args = [w_obj] + args
+        for i in range(len(args)):
+            assert i >= 0
+            pyframe.locals_cells_stack_w[i] = args[i]
+            pyframe.valuestackdepth += 1
+        return pyframe.interpret()
 
 
 class W_InstanceMethod(W_Root):
@@ -55,6 +85,19 @@ class W_InstanceMethod(W_Root):
         self.im_func = im_func
         self.im_self = im_self
         self.im_class = im_class
+
+
+    def call_args(self, args, argnum):
+        if argnum == 0:
+            w_value = self.run()
+        elif argnum == 1:
+            w_value = self.run(args[0])
+        elif argnum == 2:
+            args_t = (args[0], args[1])
+            w_value = self.run(*args_t)
+        else:
+            raise BytecodeCorruption("Too many arguments for %s" % (str(w_function)))
+        return w_value
 
     def run(self, *args):
         firstarg = self.im_self

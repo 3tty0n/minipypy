@@ -1,5 +1,5 @@
 from minipypy.objects.baseobject import W_Root, W_StrObject
-from minipypy.objects.dictobject import W_Dict
+from minipypy.objects.dictobject import W_Dict, init_mapdict_cache
 from minipypy.objects.listobject import W_ListObject
 
 from rpython.rlib.objectmodel import compute_hash
@@ -75,12 +75,12 @@ class PyCode(W_Root):
         self.co_lnotab = lnotab
 
         self.w_globals = W_Dict()
-
+        init_mapdict_cache(self)
 
     def __repr__(self):
-        return self.get_repr()
+        return self.getrepr()
 
-    def get_repr(self):
+    def getrepr(self):
         return "<code object %s, file '%s', line %d>" % (
             self.co_name.value,
             self.co_filename.value,

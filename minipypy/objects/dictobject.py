@@ -1,3 +1,5 @@
+import weakref, sys
+
 from rpython.rlib.jit import elidable, promote
 
 from minipypy.objects.baseobject import W_Root
@@ -41,3 +43,12 @@ class W_Dict(W_Root):
         self.storage.append(w_val)
 
     __setitem__ = set
+
+
+def init_mapdict_cache(pycode):
+    num_entries = len(pycode.co_names)
+    pycode._mapdict_caches = [None] * num_entries
+
+
+def LOAD_ATTR_caching(pycode, w_obj, nameindex):
+    pass

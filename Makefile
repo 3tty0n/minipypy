@@ -1,7 +1,8 @@
 RPYTHON = ./pypy/rpython/bin/rpython
+PYTHONPATH=.:./pypy
 
 compile:
-	$(RPYTHON) -O2 minipypy/main.py
+	PYTHONPATH=$(PYTHONPATH) $(RPYTHON) -O2 minipypy/main.py
 
 compile-jit:
-	$(RPYTHON) -Ojit minipypy/main.py
+	PYTHONPATH=$(PYTHONPATH) $(RPYTHON) -Ojit minipypy/main.py

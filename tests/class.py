@@ -1,5 +1,7 @@
 class C:
-    f = 0
+    x = 0
+    def f(self):
+        print self.x
 
 c = C()
-print c
+print c.f()

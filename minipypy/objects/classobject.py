@@ -56,7 +56,6 @@ class W_ClassObject(W_Root):
         return None
 
 
-
 EMPTY_MAP = Map()
 
 
@@ -65,7 +64,13 @@ class W_InstanceObject(W_Root):
         assert isinstance(w_class, W_ClassObject)
         self.w_class = w_class
         self.map = EMPTY_MAP
-        self.storage = []
+        self.storage = [None] * 16
+        self.storage_index = 0
+
+    def storage_append(self, value):
+        storage_index = hint(self.storage_index, promote=True)
+        self.storage[storage_index] = value
+        self.storage_index = storage_index + 1
 
     def __repr__(self):
         return self.getrepr()
@@ -74,7 +79,6 @@ class W_InstanceObject(W_Root):
         return "%s instance" % (self.w_class.name)
 
     def getfield(self, name):
-        assert isinstance(name, str)
         map = hint(self.map, promote=True)
         index = map.getindex(name)
         if index != -1:
@@ -82,17 +86,16 @@ class W_InstanceObject(W_Root):
         raise AttributeError(name)
 
     def write_attribute(self, name, value):
-        assert isinstance(name, str)
         map = hint(self.map, promote=True)
+        name = name.value
         index = map.getindex(name)
         if index != -1:
             self.storage[index] = value
             return
         self.map = map.new_map_with_additional_attribute(name)
-        self.storage.append(value)
+        self.storage_append(value)
 
     def getattr(self, name):
-        assert isinstance(name, str)
         try:
             return self.getfield(name)
         except AttributeError:

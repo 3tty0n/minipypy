@@ -4,7 +4,7 @@ from minipypy.objects.classobject import W_ClassObject
 from rpython.rlib import jit
 from rpython.rlib.jit import JitDriver, hint, promote, promote_string, not_rpython
 from rpython.rlib.debug import ll_assert_not_none, make_sure_not_resized, check_nonneg
-from rpython.rlib.objectmodel import always_inline, compute_hash
+from rpython.rlib.objectmodel import always_inline, dont_inline, compute_hash
 from rpython.rlib.rarithmetic import intmask, r_uint
 from rpython.rlib.rerased import new_erasing_pair
 from rpython.tool.sourcetools import func_with_new_name
@@ -225,6 +225,23 @@ class PyFrame(W_Root):
     def get_w_globals(self):
         return promote(self.code).w_globals
 
+    def get_module_name(self):
+        w_str = self.getcode().co_filename
+        return self._remove_suffix(w_str)
+
+    @jit.unroll_safe
+    def _remove_suffix(self, w_str):
+        assert isinstance(w_str, W_StrObject)
+        s = ""
+        for c in w_str.value:
+            if c == '/':
+                s = ""
+            elif c == '.':
+                break
+            else:
+                s += c
+        return W_StrObject(s)
+
     def popvalue(self):
         valuestackdepth = self.valuestackdepth - 1
         assert valuestackdepth >= 0
@@ -390,11 +407,19 @@ class PyFrame(W_Root):
         self.pushvalue(w_result)
 
     @always_inline
-    def LOAD_FAST(self, oparg, next_instr):
-        w_value = self.locals_cells_stack_w[oparg]
+    def LOAD_FAST(self, varindex, next_instr):
+        # access a local variable directly
+        w_value = self.locals_cells_stack_w[varindex]
         if w_value is None:
-            raise BytecodeCorruption("LOAD_FAST is failed")
+            self._load_fast_failed(varindex)
         self.pushvalue(w_value)
+
+    @dont_inline
+    def _load_fast_failed(self, varindex):
+        w_varname = self.getcode().co_varnames[varindex]
+        raise Exception(
+            "local variable %s referenced before assignment" %
+            w_varname)
 
     def LOAD_CONST(self, oparg, next_instr):
         const = self.read_const(oparg)
@@ -413,7 +438,7 @@ class PyFrame(W_Root):
         assert isinstance(key, W_StrObject)
         if key.value == "__name__":
             # __name__ equals to the current module name
-            return self.getcode().co_filename # co_filename is w_object
+            return self.get_module_name()
 
         w_globals = self.getcode().w_globals
         w_result = w_globals[key]
@@ -431,6 +456,8 @@ class PyFrame(W_Root):
         w_obj = self.popvalue()
         w_attributename = self.getname_w(nameindex)
         w_value = w_obj.getattr(w_attributename)
+        if isinstance(w_value, W_FunctionObject):
+            w_value = W_Method(w_value, w_obj, w_obj.w_class)
         self.pushvalue(w_value)
 
     def BINARY_POWER(self, oparg, next_instr):
@@ -596,6 +623,7 @@ class PyFrame(W_Root):
         w_obj = self.popvalue()
         w_newvalue = self.popvalue()
         # self.space.setslice(w_obj, w_start, w_end, w_newvalue)
+        raise NotImplementedError
 
     def BUILD_LIST(self, itemcount, next_instr):
         items = self.popvalues_mutable(itemcount)
@@ -620,6 +648,7 @@ class PyFrame(W_Root):
         block = self.pop_block()
         block.cleanup(self)  # the block knows how to clean up the value stack
 
+    @jit.unroll_safe
     def MAKE_FUNCTION(self, oparg, next_instr):
         argc = oparg
         code = self.popvalue()
@@ -633,55 +662,24 @@ class PyFrame(W_Root):
         self.getcode().w_globals[code.co_name] = w_function
         self.pushvalue(w_function)
 
-    @jit.unroll_safe
-    def CALL_FUNCTION(self, oparg, next_instr):
-        argc = oparg
-        kwnum = argc >> 8
+    def CALL_FUNCTION(self, argc, next_instr):
         argnum = argc & 0xFF
+        kwnum = (argc >> 8) & 0xFF
         args = [None] * argnum
         for i in range(argnum):
             args[i] = self.popvalue()
         w_function = self.popvalue()
         if isinstance(w_function, W_FunctionObject):
-            self._call_function(w_function, args)
+            w_value = w_function.call_args(args, argnum)
+        elif isinstance(w_function, W_Method):
+            w_value = w_function.call_obj_args(args, argnum)
         elif isinstance(w_function, W_InstanceMethod):
-            self._call_instancemethod(w_function, args)
+            w_value = w_function.call_args(args, argnum)
         elif isinstance(w_function, W_ClassObject):
-            w_instance = w_function.instantiate()
-            self.pushvalue(w_instance)
+            w_value = w_function.instantiate()
         else:
             raise BytecodeCorruption("w_function is not W_FunctionObject but %s" % (str(w_function)))
-
-    def _call_instancemethod(self, w_function, args):
-        argnum = len(args)
-        if argnum == 0:
-            w_value = w_function.run()
-        elif argnum == 1:
-            w_value = w_function.run(args[0])
-        elif argnum == 2:
-            args_t = (args[0], args[1])
-            w_value = w_function.run(*args_t)
-        else:
-            raise BytecodeCorruption("Too many arguments for %s" % (str(w_function)))
-        if w_value:
-            self.pushvalue(w_value)
-
-    def _build_argt_1(self, args):
-        return (args[0])
-
-    def _build_argt_2(self, args):
-        return (args[0], args[1])
-
-    def _call_function(self, w_function, args):
-        code = w_function.getcode()
-        pyframe = PyFrame(code)
-        for i in range(len(args)):
-            assert i >= 0
-            pyframe.locals_cells_stack_w[i] = args[i]
-            pyframe.valuestackdepth += 1
-        w_value = pyframe.interpret()
-        if w_value:
-            self.pushvalue(w_value)
+        self.pushvalue(w_value)
 
     def UNPACK_SEQUENCE(self, oparg, next_instr):
         tos = self.popvalue()
@@ -878,7 +876,7 @@ class PyFrame(W_Root):
 def get_printable_location(next_instr, code):
     opcode = ord(code.co_code[next_instr])
     name = opname[opcode]
-    return '%s #%d %s' % (code.get_repr(), next_instr, name)
+    return '%s #%d %s' % (code.getrepr(), next_instr, name)
 
 
 jitdriver = JitDriver(
