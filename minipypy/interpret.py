@@ -634,7 +634,8 @@ class PyFrame(W_Root):
         method_dict = self.popvalue()
         base_class = self.popvalue()
         class_name = self.popvalue()
-        w_class = W_ClassObject(class_name, base_class, method_dict)
+        # TODO: workaround. base_class should be list
+        w_class = W_ClassObject(class_name, [base_class], method_dict)
         self.pushvalue(w_class)
 
     def RETURN_VALUE(self, oparg, next_instr):
@@ -672,7 +673,8 @@ class PyFrame(W_Root):
         if isinstance(w_function, W_FunctionObject):
             w_value = w_function.call_args(args, argnum)
         elif isinstance(w_function, W_Method):
-            w_value = w_function.call_obj_args(args, argnum)
+            args = [w_function.w_instance] + args
+            w_value = w_function.w_function.call_args(args, argnum)
         elif isinstance(w_function, W_InstanceMethod):
             w_value = w_function.call_args(args, argnum)
         elif isinstance(w_function, W_ClassObject):

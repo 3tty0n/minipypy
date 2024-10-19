@@ -4,12 +4,14 @@ from minipypy.objects.dictobject import Map, W_Dict
 from rpython.rlib.jit import elidable, hint, unroll_safe
 
 class W_ClassObject(W_Root):
-    # _immutable_fields_ = ["bases_w?[*]", "w_dict?"]
+    _immutable_fields_ = ["bases_w?[*]", "w_dict?"]
 
     def __init__(self, w_name, bases_w, w_dict):
         assert isinstance(w_name, W_StrObject)
         self.name = w_name.value
+        assert isinstance(bases_w, list)
         self.bases_w = bases_w   # base classes tuple
+        assert isinstance(w_dict, W_Dict)
         self.w_dict = w_dict     # methods dictionary
 
     def getrepr(self):
@@ -29,7 +31,7 @@ class W_ClassObject(W_Root):
         return W_InstanceObject(self)
 
     def find_method(self, attr):
-        return self.w_dict.get(attr)
+        return self.getdict().get(attr)
 
     @unroll_safe
     def is_subclass_of(self, other):
@@ -60,6 +62,8 @@ EMPTY_MAP = Map()
 
 
 class W_InstanceObject(W_Root):
+    _immutable_fields_ = ['w_class']
+
     def __init__(self, w_class):
         assert isinstance(w_class, W_ClassObject)
         self.w_class = w_class

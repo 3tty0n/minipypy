@@ -1,5 +1,6 @@
 from minipypy.objects.baseobject import W_Root
 
+from minipypy.objects.classobject import W_ClassObject
 from rpython.rlib import jit
 from rpython.rlib.objectmodel import compute_hash
 
@@ -60,26 +61,28 @@ class W_FunctionObject(W_Root):
 class W_Method(W_Root):
     """A method is a function bound to a specific instance or class."""
     _immutable_fields_ = ['w_function', 'w_instance', 'w_class']
+
     def __init__(self, w_function, w_instance, w_class):
         self.w_function = w_function
         self.w_instance = w_instance
         self.w_class = w_class
 
-    def call_obj_args(self, args, argnum):
-        from minipypy.interpret import PyFrame
-        w_obj = self.w_instance
-        code = self.w_function.getcode()
-        pyframe = PyFrame(code)
-        args = [w_obj] + args
-        for i in range(len(args)):
-            assert i >= 0
-            pyframe.locals_cells_stack_w[i] = args[i]
-            pyframe.valuestackdepth += 1
-        return pyframe.interpret()
-
+    # def call_obj_args(self, args, argnum):
+    #     from minipypy.interpret import PyFrame
+    #     w_function = self.w_function
+    #     assert isinstance(w_function, W_FunctionObject)
+    #     code = w_function.getcode()
+    #     pyframe = PyFrame(code)
+    #     args = [self.w_instance] + args
+    #     for i in range(len(args)):
+    #         assert i >= 0
+    #         pyframe.locals_cells_stack_w[i] = args[i]
+    #         pyframe.valuestackdepth += 1
+    #     return pyframe.interpret()
 
 class W_InstanceMethod(W_Root):
     "Like types.InstanceMethod, but with a reasonable (structural) equality."
+    _immutable_fields_ = ['im_func', 'im_self', 'im_class']
 
     def __init__(self, im_func, im_self, im_class):
         self.im_func = im_func
@@ -88,6 +91,7 @@ class W_InstanceMethod(W_Root):
 
 
     def call_args(self, args, argnum):
+        from minipypy.interpret import BytecodeCorruption
         if argnum == 0:
             w_value = self.run()
         elif argnum == 1:
@@ -96,7 +100,7 @@ class W_InstanceMethod(W_Root):
             args_t = (args[0], args[1])
             w_value = self.run(*args_t)
         else:
-            raise BytecodeCorruption("Too many arguments for %s" % (str(w_function)))
+            raise BytecodeCorruption("Too many arguments for %s" % (str(self.im_func)))
         return w_value
 
     def run(self, *args):
