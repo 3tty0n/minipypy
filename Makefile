@@ -8,4 +8,8 @@ compile-jit:
 	PYTHONPATH=$(PYTHONPATH) $(RPYTHON) -Ojit minipypy/main.py
 
 compile-byte:
-	python2 -m compileall tests/
+	$(eval SRC := $(shell find ./tests -name "*.py" -type f))
+	@for pyc in $(SRC); do echo $$pyc; python2 -m py_compile $$pyc; done
+
+clean-byte:
+	$(RM) tests/*.pyc
