@@ -6,3 +6,6 @@ compile:
 
 compile-jit:
 	PYTHONPATH=$(PYTHONPATH) $(RPYTHON) -Ojit minipypy/main.py
+
+compile-byte:
+	python2 -m compileall tests/
