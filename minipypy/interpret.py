@@ -258,24 +258,25 @@ class PyFrame(W_Root):
         assert self.valuestackdepth >= 0
         return self.locals_cells_stack_w[self.valuestackdepth]
 
-    # we need two popvalues that return different data types:
-    # one in case we want list another in case of tuple
-    def _new_popvalues():
-        @jit.unroll_safe
-        def popvalues(self, n):
-            if n <= 0:
-                return []
-            values_w = [None] * n
-            while True:
-                n -= 1
-                if n < 0:
-                    break
-                values_w[n] = self.popvalue()
-            return values_w
-        return popvalues
-    popvalues = _new_popvalues()
-    popvalues_mutable = _new_popvalues()
-    del _new_popvalues
+    @jit.unroll_safe
+    def popvalues(self, n):
+        if n < 0:
+            return []
+        values_w = [None] * n
+        while n > 0:
+            n -= 1
+            values_w[n] = self.popvalue()
+        return values_w
+
+    @jit.unroll_safe
+    def popvalues_mutable(self, n):
+        if n < 0:
+            return []
+        values_w = [None] * n
+        while n > 0:
+            n -= 1
+            values_w[n] = self.popvalue()
+        return values_w
 
     @jit.unroll_safe
     def peekvalues(self, n):
@@ -598,26 +599,41 @@ class PyFrame(W_Root):
         w_result = w_tos1.rshift(w_tos)
         self.pushvalue(w_result)
 
-    def slice(self, w_start, w_end):
-        w_obj = self.popvalue()
-        w_result = W_SliceObject(w_obj, w_start, w_end)
-        self.pushvalue(w_result)
+    def BUILD_SLICE(self, numargs, next_instr):
+        if numargs == 3:
+            w_step = self.popvalue()
+        elif numargs == 2:
+            w_step = self.space.w_None
+        else:
+            raise BytecodeCorruption
+        w_end = self.popvalue()
+        w_start = self.popvalue()
+        w_slice = W_SliceObject(w_start, w_end, w_step)
+        self.pushvalue(w_slice)
 
     def SLICE_0(self, oparg, next_instr):
-        self.slice(W_NoneObject.W_None, W_NoneObject.W_None)
+        w_obj = self.popvalue()
+        w_result = w_obj.getslice_0()
+        self.pushvalue(w_result)
 
     def SLICE_1(self, oparg, next_instr):
         w_start = self.popvalue()
-        self.slice(w_start, W_NoneObject.W_None)
+        w_obj = self.popvalue()
+        w_result = w_obj.getslice_1(w_start)
+        self.pushvalue(w_result)
 
     def SLICE_2(self, oparg, next_instr):
         w_end = self.popvalue()
-        self.slice(W_NoneObject.W_None, w_end)
+        w_obj = self.popvalue()
+        w_result = w_obj.getslice_2(w_end)
+        self.pushvalue(w_result)
 
     def SLICE_3(self, oparg, next_instr):
-        w_end = self.popvalue()
+        w_stop = self.popvalue()
         w_start = self.popvalue()
-        self.slice(w_start, w_end)
+        w_obj = self.popvalue()
+        w_result = w_obj.getslice_3(w_start, w_stop)
+        self.pushvalue(w_result)
 
     def storeslice(self, w_start, w_end):
         w_obj = self.popvalue()
@@ -626,6 +642,7 @@ class PyFrame(W_Root):
         raise NotImplementedError
 
     def BUILD_LIST(self, itemcount, next_instr):
+        # import pdb; pdb.set_trace()
         items = self.popvalues_mutable(itemcount)
         w_list = W_List().instantiate(items)
         self.pushvalue(w_list)

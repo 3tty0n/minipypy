@@ -78,6 +78,52 @@ class W_ListObject(W_IteratorObject):
             return W_BoolObject.W_True
         return W_BoolObject.W_False
 
+    def getslice_0(self):
+        return W_ListObject(self.cls, self.wrappeditems[:])
+
+    def getslice_1(self, w_start):
+        assert isinstance(w_start, W_IntObject)
+        start = w_start.value
+        assert start >= 0
+        sublist = self.wrappeditems[start:]
+        return W_ListObject(self.cls, sublist)
+
+    def getslice_2(self, w_stop):
+        assert isinstance(w_stop, W_IntObject)
+        stop = w_stop.value
+        assert stop >= 0
+        sublist = self.wrappeditems[:stop]
+        return W_ListObject(self.cls, sublist)
+
+    def getslice_3(self, w_start, w_stop):
+        assert isinstance(w_start, W_IntObject)
+        assert isinstance(w_stop, W_IntObject)
+        start = w_start.value
+        stop = w_stop.value
+        assert start >= 0
+        assert stop >= 0
+        sublist = self.wrappeditems[start:stop]
+        return W_ListObject(self.cls, sublist)
+
+    def getslice(self, start, stop, step, length):
+        if step == 1 and 0 <= start <= stop:
+            assert start >= 0
+            assert stop >= 0
+            sublist = self.wrappteditems[start:stop]
+            return W_ListObject(self.cls, sublist)
+        else:
+            subitems_w = [W_NoneObject.W_None] * length
+            self._fill_in_with_sliced_items(subitems_w, self.wrappeditems, start, step, length)
+            return W_ListObject(self.cls, subitems_w)
+
+    def _fill_in_with_sliced_items(self, subitems_w, l, start, step, length):
+        for i in range(length):
+            try:
+                subitems_w[i] = l[start]
+                start += step
+            except IndexError:
+                raise
+
 
 def _append(w_list, *args):
     assert len(args) > 0, "append should take one argument"
