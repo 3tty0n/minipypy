@@ -2,7 +2,7 @@
 
 This is minipypy, a subset of the PyPy interpreter. This project was created to experiment with implementing a new compilation technique, optimizations, and so on.
 
-For the sake of simplicity, minipypy borrows Python's bytecode compiler. It loads a compiled bytecode by CPython/PyPy and interprets it.
+For the sake of simplicity, minipypy borrows Python's bytecode compiler. It loads a compiled bytecode and interprets it.
 
 ## Prerequisite
 
