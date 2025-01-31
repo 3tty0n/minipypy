@@ -62,7 +62,7 @@ EMPTY_MAP = Map()
 
 
 class W_InstanceObject(W_Root):
-    _immutable_fields_ = ['w_class']
+    # _immutable_fields_ = ['w_class'] # TODO: make it immutable later
 
     def __init__(self, w_class):
         assert isinstance(w_class, W_ClassObject)

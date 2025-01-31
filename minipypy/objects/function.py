@@ -63,9 +63,14 @@ class W_Method(W_Root):
     _immutable_fields_ = ['w_function', 'w_instance', 'w_class']
 
     def __init__(self, w_function, w_instance, w_class):
+        assert isinstance(w_class, W_ClassObject)
         self.w_function = w_function
         self.w_instance = w_instance
         self.w_class = w_class
+
+    def __repr__(self):
+        name = self.w_function.name if hasattr(self.w_function, "name") else "?"
+        return "<%s %s>" % (self.__class__.__name__, self.w_function.name)
 
     # def call_obj_args(self, args, argnum):
     #     from minipypy.interpret import PyFrame
@@ -89,7 +94,6 @@ class W_InstanceMethod(W_Root):
         self.im_self = im_self
         self.im_class = im_class
 
-
     def call_args(self, args, argnum):
         from minipypy.interpret import BytecodeCorruption
         if argnum == 0:
@@ -100,7 +104,8 @@ class W_InstanceMethod(W_Root):
             args_t = (args[0], args[1])
             w_value = self.run(*args_t)
         else:
-            raise BytecodeCorruption("Too many arguments for %s" % (str(self.im_func)))
+            name = "?"
+            raise BytecodeCorruption("Too many arguments for %s" % (name))
         return w_value
 
     def run(self, *args):
