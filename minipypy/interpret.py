@@ -777,12 +777,8 @@ class PyFrame(W_Root):
                 self.UNARY_CONVERT(opcode, next_instr)
             elif opcode == Bytecodes.UNARY_INVERT:
                 self.UNARY_INVERT(opcode, next_instr)
-            elif opcode == Bytecodes.BUILD_TUPLE:
-                self.BUILD_TUPLE(oparg, next_instr)
             elif opcode == Bytecodes.BUILD_CLASS:
                 self.BUILD_CLASS(oparg, next_instr)
-            elif opcode == Bytecodes.COMPARE_OP:
-                self.COMPARE_OP(oparg, next_instr)
             elif opcode == Bytecodes.INPLACE_ADD:
                 self.INPLACE_ADD(oparg, next_instr)
             elif opcode == Bytecodes.INPLACE_SUBTRACT:
@@ -817,16 +813,10 @@ class PyFrame(W_Root):
             elif opcode == Bytecodes.STORE_SLICE_3:
                 # TODO: implement it
                 pass
-            elif opcode == Bytecodes.LOAD_NAME:
-                self.LOAD_NAME(oparg, next_instr)
             elif opcode == Bytecodes.LOAD_FAST:
                 self.LOAD_FAST(oparg, next_instr)
-            elif opcode == Bytecodes.LOAD_CONST:
-                self.LOAD_CONST(oparg, next_instr)
             elif opcode == Bytecodes.LOAD_GLOBAL:
                 self.LOAD_GLOBAL(oparg, next_instr)
-            elif opcode == Bytecodes.LOAD_ATTR:
-                self.LOAD_ATTR(oparg, next_instr)
             elif opcode == Bytecodes.LOAD_LOCALS:
                 self.LOAD_LOCALS(oparg, next_instr)
             elif opcode == Bytecodes.PRINT_ITEM:
@@ -839,10 +829,46 @@ class PyFrame(W_Root):
                 self.SETUP_LOOP(oparg, next_instr)
             elif opcode == Bytecodes.STORE_NAME:
                 self.STORE_NAME(oparg, next_instr)
-            elif opcode == Bytecodes.STORE_FAST:
-                self.STORE_FAST(oparg, next_instr)
+            elif opcode == Bytecodes.DELETE_NAME:
+                # TODO: implement it
+                pass
+            elif opcode == Bytecodes.UNPACK_SEQUENCE:
+                # self.UNPACK_SEQUENCE(oparg, next_instr)
+                pass
+            elif opcode == Bytecodes.FOR_ITER:
+                pass
+            elif opcode == Bytecodes.LIST_APPEND:
+                pass
+            elif opcode == Bytecodes.STORE_ATTR:
+                pass
+            elif opcode == Bytecodes.DELETE_ATTR:
+                pass
             elif opcode == Bytecodes.STORE_GLOBAL:
                 self.STORE_GLOBAL(oparg, next_instr)
+            elif opcode == Bytecodes.DELETE_GLOBAL:
+                pass
+            elif opcode == Bytecodes.DUP_TOPX:
+                pass
+            elif opcode == Bytecodes.LOAD_NAME:
+                self.LOAD_NAME(oparg, next_instr)
+            elif opcode == Bytecodes.BUILD_TUPLE:
+                self.BUILD_TUPLE(oparg, next_instr)
+            elif opcode == Bytecodes.BUILD_SET:
+                pass
+            elif opcode == Bytecodes.BUILD_MAP:
+                pass
+            elif opcode == Bytecodes.LOAD_ATTR:
+                self.LOAD_ATTR(oparg, next_instr)
+            elif opcode == Bytecodes.COMPARE_OP:
+                self.COMPARE_OP(oparg, next_instr)
+            elif opcode == Bytecodes.IMPORT_NAME:
+                pass
+            elif opcode == Bytecodes.IMPORT_FROM:
+                pass
+            elif opcode == Bytecodes.LOAD_CONST:
+                self.LOAD_CONST(oparg, next_instr)
+            elif opcode == Bytecodes.STORE_FAST:
+                self.STORE_FAST(oparg, next_instr)
             elif opcode == Bytecodes.POP_BLOCK:
                 self.POP_BLOCK(oparg, next_instr)
             elif opcode == Bytecodes.MAKE_FUNCTION:
@@ -855,9 +881,6 @@ class PyFrame(W_Root):
                 self.ROT_TWO(oparg, next_instr)
             elif opcode == Bytecodes.ROT_THREE:
                 self.ROT_THREE(oparg, next_instr)
-            elif opcode == Bytecodes.UNPACK_SEQUENCE:
-                # self.UNPACK_SEQUENCE(oparg, next_instr)
-                pass
             elif opcode == Bytecodes.JUMP_IF_TRUE_OR_POP:
                 tos = self.top()
                 if tos.is_true():
