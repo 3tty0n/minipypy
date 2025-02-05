@@ -33,8 +33,8 @@ class W_List(W_Root):
     def write_method(self, name, value):
         self.methods[W_StrObject(name)] = value
 
-    def instantiate(self, wrappteditems):
-        return W_ListObject(self, wrappteditems)
+    def instantiate(self, wrappeditems):
+        return W_ListObject(self, wrappeditems)
 
 
 class W_ListObject(W_IteratorObject):
@@ -105,11 +105,35 @@ class W_ListObject(W_IteratorObject):
         sublist = self.wrappeditems[start:stop]
         return W_ListObject(self.cls, sublist)
 
+    def storeslice_0(self, w_newvalue):
+        assert isinstance(w_newvalue, W_IteratorObject)
+        self.wrappeditems[:] = w_newvalue.wrappeditems
+
+    def storeslice_1(self, w_newvalue, w_start):
+        assert isinstance(w_newvalue, W_IteratorObject)
+        assert isinstance(w_start, W_IntObject)
+        start = w_start.value
+        self.wrappeditems[start:] = w_newvalue.wrappeditems
+
+    def storeslice_2(self, w_newvalue, w_stop):
+        assert isinstance(w_newvalue, W_IteratorObject)
+        assert isinstance(w_stop, W_IntObject)
+        stop = w_stop.value
+        self.wrappeditems[:stop] = w_newvalue.wrappeditems
+
+    def storeslice_3(self, w_newvalue, w_start, w_stop):
+        assert isinstance(w_newvalue, W_IteratorObject)
+        assert isinstance(w_start, W_IntObject)
+        assert isinstance(w_stop, W_IntObject)
+        start = w_start.value
+        stop = w_stop.value
+        self.wrappeditems[start:stop] = w_newvalue.wrappeditems
+
     def getslice(self, start, stop, step, length):
         if step == 1 and 0 <= start <= stop:
             assert start >= 0
             assert stop >= 0
-            sublist = self.wrappteditems[start:stop]
+            sublist = self.wrappeditems[start:stop]
             return W_ListObject(self.cls, sublist)
         else:
             subitems_w = [W_NoneObject.W_None] * length
@@ -202,12 +226,12 @@ def _pop(w_list, *args):
 
 
 def _reverse(w_list, *args, **kwargs):
-    wrappteditems = w_list.wrappeditems.reverse()
-    w_list.wrappeditems = wrappteditems
+    wrappeditems = w_list.wrappeditems.reverse()
+    w_list.wrappeditems = wrappeditems
     return w_list
 
 
 def _sort(w_list, *args, **kwargs):
     wrappeditems = w_list.wrappeditems.sort()
-    w_list.wrappeditems = wrappteditems
+    w_list.wrappeditems = wrappeditems
     return w_list

@@ -1,6 +1,6 @@
 import sys
 
-from minipypy.objects.classobject import W_ClassObject
+from minipypy.objects.classobject import W_ClassObject, W_InstanceObject
 from rpython.rlib import jit
 from rpython.rlib.jit import JitDriver, hint, promote, promote_string, not_rpython
 from rpython.rlib.debug import ll_assert_not_none, make_sure_not_resized, check_nonneg
@@ -458,6 +458,7 @@ class PyFrame(W_Root):
         w_attributename = self.getname_w(nameindex)
         w_value = w_obj.getattr(w_attributename)
         if isinstance(w_value, W_FunctionObject):
+            assert isinstance(w_obj, W_InstanceObject)
             w_value = W_Method(w_value, w_obj, w_obj.w_class)
         self.pushvalue(w_value)
 
@@ -636,10 +637,35 @@ class PyFrame(W_Root):
         self.pushvalue(w_result)
 
     def storeslice(self, w_start, w_end):
+        raise NotImplementedError
+
+    def STORE_SLICE_0(self, oparg, next_instr):
         w_obj = self.popvalue()
         w_newvalue = self.popvalue()
-        # self.space.setslice(w_obj, w_start, w_end, w_newvalue)
-        raise NotImplementedError
+        w_obj.storeslice_0(w_newvalue)
+        self.pushvalue(w_obj)
+
+    def STORE_SLICE_1(self, oparg, next_instr):
+        w_start = self.popvalue()
+        w_obj = self.popvalue()
+        w_newvalue = self.popvalue()
+        w_obj.storeslice_1(w_newvalue, w_start)
+        self.pushvalue(w_obj)
+
+    def STORE_SLICE_2(self, oparg, next_instr):
+        w_end = self.popvalue()
+        w_obj = self.popvalue()
+        w_newvalue = self.popvalue()
+        w_obj.storeslice_2(w_newvalue, w_end)
+        self.pushvalue(w_obj)
+
+    def STORE_SLICE_3(self, oparg, next_instr):
+        w_stop = self.popvalue()
+        w_start = self.popvalue()
+        w_obj = self.popvalue()
+        w_newvalue = self.popvalue()
+        w_obj.storeslice_3(w_newvalue, w_start, w_stop)
+        self.pushvalue(w_obj)
 
     def BUILD_LIST(self, itemcount, next_instr):
         # import pdb; pdb.set_trace()
@@ -690,8 +716,7 @@ class PyFrame(W_Root):
         if isinstance(w_function, W_FunctionObject):
             w_value = w_function.call_args(args, argnum)
         elif isinstance(w_function, W_Method):
-            args = [w_function.w_instance] + args
-            w_value = w_function.w_function.call_args(args, argnum)
+            w_value = w_function.call_obj_args(args, argnum)
         elif isinstance(w_function, W_InstanceMethod):
             w_value = w_function.call_args(args, argnum)
         elif isinstance(w_function, W_ClassObject):
@@ -802,17 +827,13 @@ class PyFrame(W_Root):
             elif opcode == Bytecodes.SLICE_3:
                 self.SLICE_3(oparg, next_instr)
             elif opcode == Bytecodes.STORE_SLICE_0:
-                # TODO: implement it
-                pass
+                self.STORE_SLICE_0(oparg, next_instr)
             elif opcode == Bytecodes.STORE_SLICE_1:
-                # TODO: implement it
-                pass
+                self.STORE_SLICE_1(oparg, next_instr)
             elif opcode == Bytecodes.STORE_SLICE_2:
-                # TODO: implement it
-                pass
+                self.STORE_SLICE_2(oparg, next_instr)
             elif opcode == Bytecodes.STORE_SLICE_3:
-                # TODO: implement it
-                pass
+                self.STORE_SLICE_3(oparg, next_instr)
             elif opcode == Bytecodes.LOAD_FAST:
                 self.LOAD_FAST(oparg, next_instr)
             elif opcode == Bytecodes.LOAD_GLOBAL:
