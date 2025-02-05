@@ -14,8 +14,11 @@ class W_ClassObject(W_Root):
         assert isinstance(w_dict, W_Dict)
         self.w_dict = w_dict     # methods dictionary
 
+    def __repr__(self):
+        return self.getrepr()
+
     def getrepr(self):
-        return "class"
+        return "'class %s'" % (self.name)
 
     def getdict(self):
         return self.w_dict

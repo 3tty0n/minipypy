@@ -85,6 +85,19 @@ class W_Method(W_Root):
     #         pyframe.valuestackdepth += 1
     #     return pyframe.interpret()
 
+    def call_obj_args(self, args, argnum):
+        from minipypy.interpret import PyFrame
+        w_function = self.w_function
+        assert isinstance(w_function, W_FunctionObject)
+        code = w_function.getcode()
+        pyframe = PyFrame(code)
+        args = [self.w_instance] + args
+        for i in range(len(args)):
+            assert i >= 0
+            pyframe.locals_cells_stack_w[i] = args[i]
+            pyframe.valuestackdepth += 1
+        return pyframe.interpret()
+
 class W_InstanceMethod(W_Root):
     "Like types.InstanceMethod, but with a reasonable (structural) equality."
     _immutable_fields_ = ['im_func', 'im_self', 'im_class']
