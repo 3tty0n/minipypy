@@ -6,7 +6,12 @@ from rpython.rlib.rbigint import rbigint
 from rpython.rlib.objectmodel import compute_hash, r_dict
 from rpython.tool.descriptor import InstanceMethod
 
-from minipypy.objects.baseobject import W_BoolObject, W_IntObject, W_NoneObject, W_StrObject
+from minipypy.objects.baseobject import (
+    W_BoolObject,
+    W_IntObject,
+    W_NoneObject,
+    W_StrObject,
+)
 from minipypy.objects.iteratorobject import W_IteratorObject
 from minipypy.objects.mapobject import Map
 from minipypy.objects.function import *
@@ -70,6 +75,9 @@ class W_ListObject(W_IteratorObject):
     def __repr__(self):
         return self.getrepr()
 
+    def __len__(self):
+        return len(self.wrappeditems)
+
     def is_true(self):
         return len(self.wrappeditems) != 0
 
@@ -107,27 +115,71 @@ class W_ListObject(W_IteratorObject):
 
     def storeslice_0(self, w_newvalue):
         assert isinstance(w_newvalue, W_IteratorObject)
-        self.wrappeditems[:] = w_newvalue.wrappeditems
+        self.wrappeditems = w_newvalue.wrappeditems
 
+    @jit.unroll_safe
     def storeslice_1(self, w_newvalue, w_start):
         assert isinstance(w_newvalue, W_IteratorObject)
         assert isinstance(w_start, W_IntObject)
         start = w_start.value
-        self.wrappeditems[start:] = w_newvalue.wrappeditems
 
+        assert 0 <= start < len(self.wrappeditems)
+        oldlist = self.wrappeditems[:start]
+
+        newlist = [None] * (len(oldlist) + len(w_newvalue))
+
+        for i in range(len(newlist)):
+            if i < start:
+                newlist[i] = oldlist[i]
+            else:
+                newlist[i] = w_newvalue.wrappeditems[i-start]
+
+        self.wrappeditems = newlist
+
+    @jit.unroll_safe
     def storeslice_2(self, w_newvalue, w_stop):
         assert isinstance(w_newvalue, W_IteratorObject)
         assert isinstance(w_stop, W_IntObject)
         stop = w_stop.value
-        self.wrappeditems[:stop] = w_newvalue.wrappeditems
 
+        assert 0 <= stop < len(self.wrappeditems)
+        oldlist = self.wrappeditems[stop:]
+
+        newlist = [None] * (len(w_newvalue) + len(oldlist))
+        for i in range(len(newlist)):
+            if i < len(w_newvalue.wrappeditems):
+                newlist[i] = w_newvalue.wrappeditems[i]
+            else:
+                newlist[i] = oldlist[i-len(w_newvalue)]
+
+        self.wrappeditems = newlist
+
+    @jit.unroll_safe
     def storeslice_3(self, w_newvalue, w_start, w_stop):
         assert isinstance(w_newvalue, W_IteratorObject)
         assert isinstance(w_start, W_IntObject)
         assert isinstance(w_stop, W_IntObject)
         start = w_start.value
         stop = w_stop.value
-        self.wrappeditems[start:stop] = w_newvalue.wrappeditems
+
+        assert 0 <= start < len(self.wrappeditems)
+        assert 0 <= stop < len(self.wrappeditems)
+        oldlist1 = self.wrappeditems[:start]
+        oldlist2 = self.wrappeditems[stop:]
+
+        newlist = [None] * (
+            len(oldlist1) + len(w_newvalue) + len(oldlist2)
+        )
+
+        for i in range(len(newlist)):
+            if i < start:
+                newlist[i] = oldlist1[i]
+            elif start <= i < start + len(w_newvalue.wrappeditems):
+                newlist[i] = w_newvalue.wrappeditems[i-start]
+            else:
+                newlist[i] = oldlist2[i - (start + len(w_newvalue))]
+
+        self.wrappeditems = newlist
 
     def getslice(self, start, stop, step, length):
         if step == 1 and 0 <= start <= stop:
@@ -137,7 +189,9 @@ class W_ListObject(W_IteratorObject):
             return W_ListObject(self.cls, sublist)
         else:
             subitems_w = [W_NoneObject.W_None] * length
-            self._fill_in_with_sliced_items(subitems_w, self.wrappeditems, start, step, length)
+            self._fill_in_with_sliced_items(
+                subitems_w, self.wrappeditems, start, step, length
+            )
             return W_ListObject(self.cls, subitems_w)
 
     def _fill_in_with_sliced_items(self, subitems_w, l, start, step, length):
@@ -148,11 +202,45 @@ class W_ListObject(W_IteratorObject):
             except IndexError:
                 raise
 
+    @jit.unroll_safe
+    def pop(self, w_index):
+        assert isinstance(w_index, W_IntObject)
+        index = w_index.value
+
+        assert 0 <= index < len(self.wrappeditems)
+        w_value = self.wrappeditems[index]
+
+        pred = self.wrappeditems[index:]
+        succ = self.wrappeditems[:index]
+
+        newlist = [None] * (len(pred) + len(succ))
+        for i in range(len(pred) + len(succ)):
+            if i < len(pred):
+                newlist[i] = pred[i]
+            else:
+                newlist[i] = succ[i - len(pred)]
+
+        self.wrappeditems = newlist
+        return w_value
+
+    def pop_end(self):
+        return self.pop(W_IntObject(len(self.wrappeditems) - 1))
+
+    @jit.unroll_safe
+    def append(self, w_item):
+        newlist = [None] * (len(self.wrappeditems) + 1)
+        for i in range(len(newlist)):
+            if i < len(newlist) - 1:
+                newlist[i] = self.wrappeditems[i]
+            else:
+                newlist[i] = w_item
+        self.wrappeditems = newlist
+
 
 def _append(w_list, *args):
     assert len(args) > 0, "append should take one argument"
     w_item = args[0]
-    w_list.wrappeditems.append(w_item)
+    w_list.append(w_item)
     return w_list
 
 
@@ -207,18 +295,19 @@ def _mul(w_list, *args, **kwargs):
 
 def _pop(w_list, *args):
     if len(args) == 0:
-        w_list.wrappeditems.pop()
+        w_list.pop_end()
         return W_NoneObject.W_None
 
-    index = args[0]
-    assert isinstance(index, W_IntObject), \
-        "%s is not W_IntObject" % (index.getrepr())
-    index = index.value
+    w_index = args[0]
+    assert isinstance(w_index, W_IntObject), "%s is not W_IntObject" % (
+        w_index.getrepr()
+    )
+    index = w_index.value
     if index < 0:
         raise IndexError
 
     try:
-        item = w_list.wrappeditems.pop(index)
+        item = w_list.pop(w_index)
     except IndexError:
         raise
 
