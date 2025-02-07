@@ -725,12 +725,11 @@ class PyFrame(W_Root):
             raise BytecodeCorruption("w_function is not W_FunctionObject but %s" % (str(w_function)))
         self.pushvalue(w_value)
 
-    def UNPACK_SEQUENCE(self, oparg, next_instr):
-        tos = self.popvalue()
-        assert isinstance(tos, W_IteratorObject)
-        seq = tos.wrappeditems
-        for i in range(oparg):
-            self.pushvalue(seq[len(seq) - (i + 1)])
+    def UNPACK_SEQUENCE(self, count, next_instr):
+        w_iter = self.popvalue()
+        assert isinstance(w_iter, W_IteratorObject)
+        for w_x in w_iter.unpack(count):
+            self.pushvalue(w_x)
 
     def BUILD_TUPLE(self, oparg, next_instr):
         count = oparg
@@ -854,8 +853,7 @@ class PyFrame(W_Root):
                 # TODO: implement it
                 pass
             elif opcode == Bytecodes.UNPACK_SEQUENCE:
-                # self.UNPACK_SEQUENCE(oparg, next_instr)
-                pass
+                self.UNPACK_SEQUENCE(oparg, next_instr)
             elif opcode == Bytecodes.FOR_ITER:
                 pass
             elif opcode == Bytecodes.LIST_APPEND:
