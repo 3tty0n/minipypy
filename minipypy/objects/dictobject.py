@@ -1,6 +1,6 @@
 import weakref, sys
 
-from rpython.rlib.jit import elidable, promote
+from rpython.rlib.jit import elidable, promote, unroll_safe
 
 from minipypy.objects.baseobject import W_Root
 from minipypy.objects.mapobject import Map
@@ -16,6 +16,7 @@ class W_Dict(W_Root):
     def __repr__(self):
         return self.getrepr()
 
+    @unroll_safe
     def getrepr(self):
         s = "{"
         for i in range(len(self.storage)):
@@ -24,16 +25,17 @@ class W_Dict(W_Root):
         s += "}"
         return s
 
-    def get(self, w_key):
+    def getitem(self, w_key):
         map = promote(self.map)
         index = map.getindex(w_key)
         if index != -1:
-            return self.storage[index]
+            if index < len(self.storage):
+                return self.storage[index]
         return None
 
-    __getitem__ = get
+    __getitem__ = getitem
 
-    def set(self, w_key, w_val):
+    def setitem(self, w_key, w_val):
         map = promote(self.map)
         index = map.getindex(w_key)
         if index != -1:
@@ -42,8 +44,15 @@ class W_Dict(W_Root):
         self.map = map.new_map_with_additional_name(w_key)
         self.storage.append(w_val)
 
-    __setitem__ = set
+    __setitem__ = setitem
 
+    def delitem(self, w_key):
+        map = promote(self.map)
+        index = map.getindex(w_key)
+        if index != -1:
+            del self.storage[index]
+            return
+        raise Exception("%s is not defined" % (w_key))
 
 def init_mapdict_cache(pycode):
     num_entries = len(pycode.co_names)

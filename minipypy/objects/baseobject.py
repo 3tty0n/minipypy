@@ -107,6 +107,9 @@ class W_IntObject(W_Root):
     def toint(self):
         return self.value
 
+    def tofloat(self):
+        return float(self.value)
+
     @jit.elidable
     def unwrap(self):
         return self.value
@@ -250,6 +253,76 @@ class W_IntObject(W_Root):
         if isinstance(other, W_LongObject):
             return W_BoolObject.from_bool(self.value >= other.value.toint())
         return W_BoolObject.W_True
+
+
+class W_FloatObject(W_Root):
+    _immutable_fields_ = ["value"]
+    PREBUILT = []
+
+    def toint(self):
+        return self.value
+
+    @jit.elidable
+    def unwrap(self):
+        return self.value
+
+    def getstr(self):
+        return str(self.value)
+
+    def is_true(self):
+        return self.value == 0
+
+    @staticmethod
+    def from_int(i):
+        w_result = instantiate(W_IntObject)
+        w_result.value = float(i)
+        return w_result
+
+    def positive(self):
+        return W_IntObject(+self.value)
+
+    def negative(self):
+        return W_IntObject(-self.value)
+
+    def not_(self):
+        if self.value == 0:
+            return W_BoolObject.W_True
+        return W_BoolObject.W_False
+
+    def add(self, other):
+        if isinstance(other, W_FloatObject):
+            return W_FloatObject(self.value + other.value)
+        elif isinstance(other, W_IntObject):
+            return W_FloatObject(self.value + float(other.value))
+        else:
+            raise WObjectOperationException("Unexpected object: %s" % (other))
+
+    def sub(self, other):
+        if isinstance(other, W_FloatObject):
+            return W_FloatObject(self.value - other.value)
+        elif isinstance(other, W_IntObject):
+            return W_IntObject(self.value - float(other.value))
+        else:
+            raise WObjectOperationException("Unexpected object: %s" % (other))
+
+    def mul(self, other):
+        if isinstance(other, W_FloatObject):
+            return W_IntObject(self.value * other.value)
+        elif isinstance(other, W_IntObject):
+            return W_IntObject(self.value * float(other.value))
+        else:
+            raise WObjectOperationException("Unexpected object: %s" % (other))
+
+    def div(self, other):
+        if isinstance(other, W_FloatObject):
+            return W_IntObject(self.value / other.value)
+        elif isinstance(other, W_FloatObject):
+            return W_IntObject(self.value / float(other.value))
+        else:
+            raise WObjectOperationException("Unexpected object: %s" % (other))
+
+    def true_div(self, other):
+        return self.div(other)
 
 
 class W_LongObject(W_Root):

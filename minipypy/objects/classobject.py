@@ -27,14 +27,14 @@ class W_ClassObject(W_Root):
         assert isinstance(attr, str)
         w_dict = self.getdict()
         if w_dict is not None:
-            return w_dict.get(attr)
+            return w_dict.getitem(attr)
         return None
 
     def instantiate(self):
         return W_InstanceObject(self)
 
     def find_method(self, attr):
-        return self.getdict().get(attr)
+        return self.getdict().getitem(attr)
 
     @unroll_safe
     def is_subclass_of(self, other):
@@ -50,7 +50,7 @@ class W_ClassObject(W_Root):
     @unroll_safe
     def lookup(self, attr):
         assert isinstance(attr, str)
-        w_result = self.w_dict.get(attr)
+        w_result = self.w_dict.getitem(attr)
         if w_result is not None:
             return w_result
         for base in self.bases_w:

@@ -28,6 +28,10 @@ def key_hash(key):
     return compute_hash(key.value)
 
 
+def newlist(wrappteditems):
+    return W_List().instantiate(wrappeditems)
+
+
 class W_List(W_Root):
 
     def __init__(self):

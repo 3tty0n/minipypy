@@ -225,6 +225,9 @@ class PyFrame(W_Root):
     def get_w_globals(self):
         return promote(self.code).w_globals
 
+    def get_w_locals(self):
+        return promote(self.w_locals)
+
     def get_module_name(self):
         w_str = self.getcode().co_filename
         return self._remove_suffix(w_str)
@@ -394,15 +397,21 @@ class PyFrame(W_Root):
         w_value = self.popvalue()
         self.getcode().w_globals[name] = w_value
 
+    def DELETE_NAME(self, oparg, next_instr):
+        w_name = self.getname_w(oparg)
+        try:
+            self.get_w_locals().delitem(w_name)
+        except:
+            raise BytecodeCorruption("DELETE_NAME is failed at: %s" % (w_name))
+
     def LOAD_NAME(self, oparg, next_instr):
         co_names = promote(self.getcode().co_names)
         name = co_names[oparg]
         assert name is not None
 
-        w_result = self.w_locals[name]
+        w_result = self.get_w_locals().getitem(name)
         if w_result is None:
             w_result = self._load_global(name)
-
         if w_result is None:
             raise BytecodeCorruption("LOAD_NAME is failed: " + str(name))
         self.pushvalue(w_result)
@@ -850,8 +859,7 @@ class PyFrame(W_Root):
             elif opcode == Bytecodes.STORE_NAME:
                 self.STORE_NAME(oparg, next_instr)
             elif opcode == Bytecodes.DELETE_NAME:
-                # TODO: implement it
-                pass
+                self.DELETE_NAME(oparg, next_instr)
             elif opcode == Bytecodes.UNPACK_SEQUENCE:
                 self.UNPACK_SEQUENCE(oparg, next_instr)
             elif opcode == Bytecodes.FOR_ITER:
