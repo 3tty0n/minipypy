@@ -26,6 +26,9 @@ class StdObjSpace(ObjSpace):
     def newint(self, val):
         return W_IntObject.from_int(val)
 
+    def newbool(self, val):
+        return W_BoolObject.from_bool(val)
+
     def newlist(self, list_w, sizehint=-1):
         assert not list_w or sizehint == -1
         return W_List().instantiate(list_w)
